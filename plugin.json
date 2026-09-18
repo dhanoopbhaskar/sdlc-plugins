@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sdlc-plugins",
+  "version": "0.1.0",
+  "description": "Software Development Lifecycle Plugins",
+  "author": {
+    "name": "Dhanoop Bhaskar",
+    "email": "dhaskarbhaskar@gmail.com",
+    "url": "https://dhanoopbhaskar.com"
+  },
+  "homepage": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+  "repository": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+  "license": "MIT",
+  "keywords": ["sdlc", "plugins", "skills"]
+}
