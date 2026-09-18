@@ -1,0 +1,28 @@
+{
+  "name": "sdlc-plugins",
+  "owner": {
+    "name": "Dhanoop Bhaskar",
+    "email": "dhaskarbhaskar@gmail.com"
+  },
+  "metadata": {
+    "description": "Software Development Lifecycle Plugins marketplace",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "sdlc-plugins",
+      "description": "Software Development Lifecycle Plugins",
+      "version": "0.1.0",
+      "source": ".",
+      "author": {
+        "name": "Dhanoop Bhaskar",
+        "email": "dhaskarbhaskar@gmail.com",
+        "url": "https://dhanoopbhaskar.com"
+      },
+      "homepage": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+      "repository": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+      "license": "MIT",
+      "keywords": ["sdlc", "plugins", "skills"]
+    }
+  ]
+}
