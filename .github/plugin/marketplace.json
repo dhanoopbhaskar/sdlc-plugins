@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Software Development Lifecycle Plugins marketplace",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "sdlc-plugins",
       "description": "Software Development Lifecycle Plugins",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": ".",
       "author": {
         "name": "Dhanoop Bhaskar",
@@ -22,7 +22,18 @@
       "homepage": "https://github.com/dhanoopbhaskar/sdlc-plugins",
       "repository": "https://github.com/dhanoopbhaskar/sdlc-plugins",
       "license": "MIT",
-      "keywords": ["sdlc", "plugins", "skills"]
+      "keywords": [
+        "sdlc",
+        "plugins",
+        "skills",
+        "migration",
+        "legacy-code",
+        "code-discovery",
+        "discovery",
+        "reconnaissance",
+        "cartography",
+        "risk"
+      ]
     }
   ]
 }
