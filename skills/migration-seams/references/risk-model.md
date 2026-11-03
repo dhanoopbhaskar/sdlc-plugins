@@ -182,7 +182,9 @@ report, or a single entry point) and what must remain together until the group i
 
 1. Build the dependency graph (component → component) with edge types.
 2. Collapse shared-data and cross-transaction edges into atomic groups.
-3. Topologically sort the condensed graph.
+3. Detect remaining cycles. Collapse strongly connected components into sequencing groups, or
+   specify cycle-breaking prerequisites; topologically sort only once the resulting graph is
+   acyclic.
 4. Within each rank, order by ascending blast radius and ascending readiness cost.
 5. Pull forward any slice that de-risks a top-three risk, even if it is not the easiest.
 6. Verify the first slice produces an observable end-to-end outcome.
