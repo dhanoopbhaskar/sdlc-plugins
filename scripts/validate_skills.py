@@ -438,7 +438,7 @@ def check_skill(skill_md: Path) -> str:
     description = scalar("description", required=True)
     compatibility = scalar("compatibility", required=False)
 
-    if name:
+    if name is not None:
         if name != skill_md.parent.name:
             fail(f"{rel}: name {name!r} does not match directory {skill_md.parent.name!r}")
         if len(name) > MAX_NAME or not NAME_RE.fullmatch(name):
