@@ -95,7 +95,9 @@ At the start of every session:
    repositories, scope, and destination match the current request. If they differ, do not resume
    this bundle—ask which scope wins or start a new one.
 2. Take the first `in-progress` shard whose `Lease expires` timestamp has passed, or the first
-   `pending` shard in breadth-first order. The default lease is 24 hours after the last update.
+   eligible `pending` or `partial` shard in breadth-first order. Resume a `partial` shard from
+   its `Notes` only when the current session has budget for the remaining work. The default
+   lease is 24 hours after the last update.
 3. Verify the recorded commit still matches the working tree. If not, re-census the shard's
    paths and mark changed concepts stale.
 4. Do not redo `done` shards unless their paths changed.
