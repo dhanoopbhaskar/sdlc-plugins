@@ -238,7 +238,12 @@ def parse_frontmatter(frontmatter: str) -> dict[str, str | None]:
         elif raw.startswith(("'", '"')):
             value, i = _parse_quoted(lines, i, raw, key)
         elif raw and not raw.startswith("#"):
-            fields[key] = _parse_plain(raw)
+            plain = _parse_plain(raw)
+            fields[key] = (
+                None
+                if plain.startswith(("[", "{")) or plain in ("~", "null", "Null", "NULL")
+                else plain
+            )
             i += 1
             continue
         else:
