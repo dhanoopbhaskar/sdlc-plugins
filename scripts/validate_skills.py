@@ -324,8 +324,13 @@ def strip_indented_code(text: str) -> str:
             in_code = False
             code_indent = None
 
+        while list_indents and indent < list_indents[-1][1]:
+            list_indents.pop()
         marker = LIST_ITEM_RE.match(line)
-        if marker is not None:
+        if marker is not None and not (
+            previous_blank
+            and indent >= (list_indents[-1][1] + 4 if list_indents else 4)
+        ):
             marker_indent = len(marker.group(1).replace("\t", "    "))
             while list_indents and marker_indent < list_indents[-1][1]:
                 list_indents.pop()
