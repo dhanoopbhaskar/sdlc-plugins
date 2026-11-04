@@ -315,7 +315,8 @@ def strip_indented_code(text: str) -> str:
             previous_blank = True
             continue
 
-        indent = len(line) - len(line.lstrip(" "))
+        leading = line[: len(line) - len(line.lstrip(" \t"))]
+        indent = len(leading.expandtabs(4))
         if in_code:
             if indent >= (code_indent or 0):
                 previous_blank = False
