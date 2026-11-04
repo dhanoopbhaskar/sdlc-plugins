@@ -445,8 +445,12 @@ def heading_slugs(text: str) -> set[str]:
         if not slug:
             continue
         count = counts.get(slug, 0)
+        candidate = slug if count == 0 else f"{slug}-{count}"
+        while candidate in slugs:
+            count += 1
+            candidate = f"{slug}-{count}"
         counts[slug] = count + 1
-        slugs.add(slug if count == 0 else f"{slug}-{count}")
+        slugs.add(candidate)
     return slugs
 
 
