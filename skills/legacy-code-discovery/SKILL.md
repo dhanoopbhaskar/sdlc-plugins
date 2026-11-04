@@ -1,7 +1,7 @@
 ---
 name: legacy-code-discovery
 description: "Plans and runs a multi-phase, evidence-graded discovery program for an unfamiliar or legacy estate before a migration, replatform, rewrite, or major upgrade. Use when asked to produce a discovery dossier, estimate migration scope across a whole system, or coordinate reconnaissance, mapping, and risk/seam analysis over multiple sessions. Orchestrates repo-reconnaissance, system-cartography, and migration-seams and writes an OKF v0.2 knowledge bundle. Not for single-file changes, greenfield work, routine code navigation, or routine API documentation."
-compatibility: "Requires read-only access to the target repositories. Works best with repo-reconnaissance, system-cartography, and migration-seams from the same plugin; the fallback in Related skills applies when they are unavailable."
+compatibility: "Requires read access to the target repositories and write access only to the discovery bundle. Works best with repo-reconnaissance, system-cartography, and migration-seams from the same plugin; the fallback in Related skills applies when they are unavailable."
 ---
 
 # Legacy Code Discovery
@@ -39,13 +39,21 @@ By the end, a reader who has never seen the estate can answer:
 **Not for:** a single feature or file change, greenfield design, routine code documentation
 (use `code-documenter`), or writing the migration itself.
 
+**Skill selection:** use this orchestrator whenever the request spans more than one phase or
+needs a durable, resumable bundle. A request confined to one phase may use that phase skill
+standalone; the phase skills still write into the same bundle so work can be resumed here.
+
 ## Non-negotiables
 
 1. **Read-only by default.** Do not build, install, migrate, format, or modify the target
    repositories. Running the project's own read-only inspection commands is fine; anything
-   that mutates state needs explicit approval. The only writes are to the discovery bundle.
+   that mutates state needs explicit approval. The only writes are to the discovery bundle;
+   read-only applies to the source tree, and the bundle may live under `docs/discovery/` or
+   outside the repository when the repository must remain untouched.
 2. **Evidence before assertion.** Every material claim cites a repository path with a line
-   range, a command and its output, or a document. Use four grades:
+   range, a command and its output, or a document. A file-level fact, such as a manifest that
+   declares a dependency, may cite the path alone when no specific line is load-bearing. Use
+   four grades:
    `confirmed` (directly read or executed), `corroborated` (two or more independent indirect
    signals), `inferred` (naming, convention, or structural heuristic), `unknown`.
 3. **Never dress inference as fact.** Business rules, data ownership, and runtime behavior are
@@ -65,6 +73,10 @@ By the end, a reader who has never seen the estate can answer:
    questions.
 
 ## Workflow
+
+The phase skills and reference files own procedure and templates. This file owns the gates,
+cross-phase handoff, and synthesis; if a detail disagrees, reconcile it rather than choosing one
+silently.
 
 Copy this checklist and keep it current:
 
@@ -99,7 +111,7 @@ If unanswered, record an explicit assumption in the charter and proceed. Do not 
 A good default is: inventory the whole estate at shallow depth, then deep-dive the units
 that carry the most risk or the most business value.
 
-Create `charter.md` and `ledger.md` first. See
+Create the bundle-root `index.md` and `log.md`, then `charter.md` and `ledger.md`. See
 [references/okf-bundle.md](references/okf-bundle.md) for the exact frontmatter and layout,
 and [references/question-bank.md](references/question-bank.md) for framing prompts.
 
@@ -119,27 +131,32 @@ Use the `repo-reconnaissance` skill for the full procedure. At minimum, establis
 
 **Gate:** every repository is pinned to a commit (or recorded as `blocked` in the ledger), every
 deployable unit is named with its artifact and runtime target, the shard list covers all
-first-party paths, every shard has a status, and every `in-progress` shard has an owner and an
+first-party paths, every shard has a state, and every `in-progress` shard has an owner and an
 unexpired lease.
 
 ### Step 2 — Inventory and cartography
 
 Use `system-cartography`; it owns the procedure and concept set. Canonical concept templates
 live in [references/okf-bundle.md](references/okf-bundle.md). Work breadth-first at
-`inventory` depth across every shard before deep-diving any single one. The list below is the
-minimum gate for this phase, not a second procedure. For each shard, capture:
+`inventory` depth across every shard before deep-diving any single one. Components, Entry
+Points, and Data Stores become concepts at `inventory`; Flows and Integration Boundaries are
+`deep` artifacts. The list below is the minimum for this phase, not a second procedure. For
+each shard, capture at the depth assigned:
 
 - Components: purpose, runtime role, public surface, inbound/outbound dependencies.
 - Entry points: HTTP/RPC/CLI/job/queue/event triggers, with handler locations.
-- Flows: request or event paths that cross component boundaries, including failure paths.
+- Flows: request or event paths that cross component boundaries, including failure paths. At
+  `inventory`, record an Open Question when a path cannot be traced without a `deep` pass.
 - Boundaries: synchronous and asynchronous contracts, file and batch interfaces,
-  shared databases, third-party services, identity, and network egress.
+  shared databases, third-party services, identity, and network egress. At `inventory`,
+  record the edge and an Open Question for any contract or owner that is not yet verifiable.
 - Data: stores, schemas, ownership, migration scripts, retention, and personal data.
 - Tests: what exists, what it actually covers, and what cannot be run.
 
 **Gate:** each deployable unit has at least one Component concept; every entry point is
-linked to a component; every cross-boundary edge has an Integration Boundary concept or a
-declared unknown; every data store has an owner (or an open question).
+linked to a component; every cross-boundary edge is recorded, with an Integration Boundary
+concept once its contract is verified at `deep` and an Open Question or declared unknown
+otherwise; every data store has an owner (or an open question).
 
 ### Step 3 — Behavior and rules
 
@@ -160,14 +177,21 @@ For each: trigger, observed behavior, evidence, confidence, and an example when 
 Do not summarize intent from names alone. If the only evidence is a name, grade it `inferred`
 and attach a validation experiment.
 
+**Gate:** every load-bearing behavior has a Business Rule concept with a trigger, an observed
+behavior, evidence, and a confidence grade; a rule is `confirmed` only from a code path plus a
+test, fixture, or observed output; every `corroborated` or `inferred` rule is framed as a
+hypothesis and has a Validation Experiment or an Open Question; no rule is marked `confirmed`
+from a name, comment, or single weak signal.
+
 ### Step 4 — Risk and seams
 
 Use `migration-seams`. Produce:
 
 - A risk register scored on likelihood, impact, and detectability, with the evidence behind
   each score.
-- Coupling hotspots: high fan-in, shared mutable data, cyclic dependencies, god modules,
-  duplicated logic, and cross-deployable transactions.
+- Coupling hotspots, recorded in `system.md` `# Coupling`: high fan-in, shared mutable data,
+  cyclic dependencies, god modules, duplicated logic, version skew, shared mutable config, and
+  cross-deployable transactions, ranked by blast radius × change frequency.
 - Migration seams: boundaries where a component can be isolated, wrapped, or replaced, with
   the seam pattern, prerequisites, and blast radius.
 - Readiness per deployable unit: buildable, runnable, testable, observable, documented,
@@ -176,9 +200,14 @@ Use `migration-seams`. Produce:
   evidence-based trade-offs — not a recommendation unsupported by the map.
 - Validation experiments: the cheapest check that would confirm or kill each major assumption.
 
+**Gate:** the `migration-seams` completion gate is satisfied; `system.md` `# Coupling` records
+the hotspots and `# Sequencing` records the atomic groups; and every risk linked from
+`system.md` has a concrete failure scenario, evidence, and a mitigation or accepted-risk note.
+
 ### Step 5 — Synthesize and hand off
 
-Update `system.md` `# Decision summary` and finish with a short, decision-oriented report:
+Update `system.md` `# Coverage` and `# Decision summary`, then finish with a short,
+decision-oriented report:
 
 1. One-page system map: deployables, data, external boundaries, and the riskiest edges.
 2. Top ten findings, each with evidence and migration consequence.
@@ -190,7 +219,13 @@ Update `system.md` `# Decision summary` and finish with a short, decision-orient
 Keep this summary in `system.md`, not only in the conversation, so the next session inherits it.
 Then update `index.md` and add a dated entry at the top of `log.md`. Leave every new concept at
 `status: draft` until a human reviews it, and leave `verified` unset unless a real check has
-occurred; `status` records lifecycle, while `verified` records an actual check.
+occurred; `status` records lifecycle, while `verified` records an actual check. When a later
+phase materially changes an existing concept, clear its `verified` and return it to
+`status: draft`: a verification event covers only the content it was applied to.
+
+**Gate:** `ledger.md` reflects final shard states and the coverage vector; every risk and seam is
+linked from `system.md`; every open question has a default assumption and a way to answer it (or
+a linked Validation Experiment); and `index.md` and `log.md` are current.
 
 ## Output contract
 
@@ -210,7 +245,7 @@ rules.
 | `system.md` | System | yes |
 | `repos/` | Repository Registry + per-repo maps | multi-repo only |
 | `inventory/` | Component | yes |
-| `flows/` | Entry Point, Flow, Integration Boundary | yes |
+| `flows/` | Entry Point, Flow, Integration Boundary | when entry points exist |
 | `data/` | Data Store | when data exists |
 | `rules/` | Business Rule | when produced |
 | `risks/` | Migration Risk | when produced |
@@ -218,18 +253,23 @@ rules.
 | `questions/` | Open Questions, Validation Experiment | when produced |
 
 A path marked `when produced` is created on the first concept of that type; do not invent a
-concept to fill it. `repos/` is required whenever the estate has more than one repository.
+concept to fill it. `flows/` is required when a deployable has entry points; a library's public
+API counts as an entry point. If the estate has none, record that in the ledger instead of
+creating an empty directory. `repos/` is required whenever the estate has more than one
+repository.
 
 Every concept carries `generated`, a `repo` and `shard` where applicable, and an `evidence`
 grade; concepts using `repo://` also carry `commit`. Material claims about the codebase carry
 `sources`; a concept whose sources span repositories carries `repo` and `commit` on each source
-instead of at the top level. Framing documents such as the charter may cite only user answers
-and intent documents. Never invent `verified`; add it only after a real check. `system.md`
-carries the context, stack/topology, deployable, build-and-run, and deployment-surface sections
-from `repo-reconnaissance`; the runtime-shape, data-landscape, and external-boundary sections
-from `system-cartography`; and the readiness, migration-option, sequencing, and riskiest-edge
-sections from `migration-seams`. The parent owns `# Coverage` and `# Decision summary` and
-reconciles every section.
+instead of at the top level. Process and aggregate documents (`charter.md`, `ledger.md`,
+`system.md`) are the exception: they link to their sources or supporting concepts instead of
+duplicating citations. Framing documents such as the charter may cite only user answers and
+intent documents. Never invent `verified`; add it only after a real check. `system.md` carries
+the sections owned by each phase; the authoritative ownership table and the frontmatter update
+rule are in [references/okf-bundle.md](references/okf-bundle.md#section-ownership). The parent
+owns `# Coverage`, `# Decision summary`, and `system.md` frontmatter, and reconciles every
+section: keep the original `generated.by`, bump `generated.at`, recompute `evidence`, and clear
+`verified` on material changes.
 
 For example, `ledger.md` starts with:
 
@@ -237,9 +277,9 @@ For example, `ledger.md` starts with:
 ---
 type: Discovery Ledger
 title: Discovery Coverage Ledger
-description: Shard plan, depth, status, and coverage accounting for this discovery.
-evidence: confirmed
-generated: { by: legacy-code-discovery/0.2.0, at: 2026-11-03T10:00:00Z }
+description: Shard plan, depth, state, and coverage accounting for this discovery.
+evidence: unknown  # coverage is not verified until shards complete
+generated: { by: legacy-code-discovery/0.2.1, at: 2026-11-03T10:00:00Z }
 status: draft
 ---
 ```
@@ -248,10 +288,14 @@ status: draft
 
 Full detail in [references/scale.md](references/scale.md). Defaults:
 
+- **Small estates:** a single repository with a handful of deployables may use one
+  `inventory`-depth shard in one session. Complete the `surface` pass inside that shard first;
+  depth is cumulative. Skip fan-out and the multi-repo registry, but still write the charter,
+  ledger, system map, coverage vector, and open questions.
 - Partition by **deployable unit → package → directory**, never by file count alone.
 - Size shards per [references/scale.md](references/scale.md) §1: about one focused session;
   the reference gives the file-count guideline.
-- Track status per shard: `pending`, `in-progress`, `done`, `partial`, `blocked`, `skipped`,
+- Track state per shard: `pending`, `in-progress`, `done`, `partial`, `blocked`, `skipped`,
   `deprecated`.
 - Breadth before depth: `surface` across everything, `inventory` across all shards, `deep` only
   on risk-ranked shards.
@@ -297,4 +341,5 @@ Stop and report rather than guessing when:
 
 If your client does not expose these as separately invokable skills, read each sibling
 `SKILL.md` from this plugin and follow its procedure; the phases above are self-contained and
-do not depend on automatic delegation.
+do not depend on automatic delegation. If a linked reference file is unavailable, use the output
+contract and examples in this file and the corresponding phase `SKILL.md` rather than stopping.

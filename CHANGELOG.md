@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-04
+
+### Fixed
+- Evidence grading: behavioral claims now require `confirmed` evidence, and `corroborated`
+  behavior is recorded as a hypothesis with a Validation Experiment instead of settled
+  behavior. Process documents are graded by their weakest planning claim, so
+  `evidence: confirmed` no longer appears alongside unknown or blocked work.
+- OKF output contract: `charter.md`, `ledger.md`, and `system.md` link to sourced concepts
+  instead of carrying `sources`; parent owns `system.md` frontmatter, and `okf-bundle.md` is
+  the single source of truth for section ownership.
+- `repo://` evidence: resolution clarified across Git hosts with path percent-encoding,
+  host-specific line-range anchors (GitHub, GitLab, Bitbucket, Azure DevOps), and
+  snapshot-SHA or path-only `inferred` evidence for dirty working trees.
+- Validation: link checks now verify heading anchors, scanning ignores indented code blocks
+  and HTML comments, version metadata must be semantic versioning, and `check_versions` /
+  `check_actor_versions` report non-object JSON and malformed manifests instead of raising
+  `AttributeError`.
+- Tests: added a minimal OKF bundle fixture and conformance test covering frontmatter, links,
+  `repo://` evidence, actors, status values, process-document sources, index/log
+  completeness, and a cross-repository Flow with per-source `repo`/`commit` fields.
+- Discovery workflow: skills need read access to targets and write access only to the bundle;
+  `flows/` is required only when entry points exist; open questions and risks must be
+  answered and linked; editing a concept clears `verified` and returns it to `status: draft`,
+  including when `migration-seams` adds a parity-hazard section.
+- Orchestration: the worker output contract is depth-aware with `system.md` fragment returns
+  and parent/worker lease ownership; ledger writes follow a single-writer protocol; added
+  behavior/rules and synthesis phase gates plus a final ledger reconciliation gate.
+- Depth: a small-estate path uses a single `inventory` shard, while Flows and Integration
+  Boundaries stay `deep` artifacts with Open Questions at `inventory`; `system-cartography`
+  and Step 2 gates are depth-aware so `inventory` passes are not held to `deep`
+  requirements. Standalone phases create a minimal charter (partial bundle) and a `repos/`
+  registry, or record its absence as an Open Question.
+- Templates: added a `# Coupling` section owned by `migration-seams`, an Owner column and
+  atomic groups in `system.md` sequencing, `shard` in the risk example, a defined shard
+  `Evidence` column, and fixture/test-data exclusions.
+- Reconnaissance: commands redact credentials from remote URLs and use `grep -r` with
+  dependency/build-directory exclusions; added `justfile`/`Taskfile` detection, reduced
+  non-git census noise, and recorded only measurable coverage rows while marking later-phase
+  rows `not yet measured`.
+- Phase descriptions gained trigger-precedence notes so multi-phase requests select the
+  orchestrator, and are clarified as `legacy-code-discovery` phases.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added

@@ -1,8 +1,10 @@
 # Portable Read-Only Commands
 
 These recipes assume a POSIX shell and `git`. Every command is read-only. `rg`, `cloc`, and
-`tokei` are optional; when one is missing, use the fallback rather than installing it. On a
-non-POSIX host, use the equivalent and record what you used.
+`tokei` are optional; when one is missing, use the fallback rather than installing it. The
+`grep --exclude` and `--exclude-dir` options are GNU extensions, also supported by current macOS
+`grep`; on a strictly POSIX system, use `find` with `-prune` or `rg` instead. On any non-POSIX
+host, use the equivalent and record what you used.
 
 Set the repository root once:
 
@@ -10,7 +12,7 @@ Set the repository root once:
 repo="<path-to-repo>"
 ```
 
-The `rg` recipes below are optional. When `rg` is unavailable, use the `grep -RIlE` fallback
+The `rg` recipes below are optional. When `rg` is unavailable, use the `grep -rlIE` fallback
 shown under [Find data and messaging surfaces](#find-data-and-messaging-surfaces), substituting
 the pattern; do not install `rg` just to run a search.
 
@@ -21,7 +23,8 @@ git -C "$repo" rev-parse HEAD
 git -C "$repo" rev-parse --abbrev-ref HEAD
 git -C "$repo" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##'
 git -C "$repo" status --porcelain
-git -C "$repo" remote -v
+# Remote URLs can embed credentials; redact userinfo before displaying or recording.
+git -C "$repo" remote -v | sed -E 's#(://)[^@/]+@#\1<redacted>@#g'
 git -C "$repo" submodule status
 ```
 
@@ -56,7 +59,10 @@ Record which definition you used; it is the denominator for coverage.
 Fallback when the directory is not a git repository:
 
 ```sh
-find "$repo" -type f -not -path "*/.git/*" | wc -l
+find "$repo" -type f \
+  -not -path "*/.git/*" -not -path "*/node_modules/*" -not -path "*/vendor/*" \
+  -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/target/*" \
+  -not -path "*/.venv/*" | wc -l
 ```
 
 Files by extension (extensionless files and dotfiles are reported as `(none)`):
@@ -89,7 +95,7 @@ installed, record the tool and version; otherwise use `wc -l` on the first-party
 
 ```sh
 lsf \
-  | grep -Ei '(^|/)(package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.ya?ml|.*\.(cs|fs|vb)proj|.*\.sln|global\.json|packages\.lock\.json|Directory\.Build\.props|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|build\.sbt|go\.mod|go\.sum|Cargo\.toml|Cargo\.lock|rust-toolchain[^/]*|pyproject\.toml|requirements[^/]*\.txt|setup\.py|Pipfile|poetry\.lock|uv\.lock|Gemfile|Gemfile\.lock|.*\.gemspec|composer\.json|composer\.lock|mix\.exs|mix\.lock|rebar\.config|CMakeLists\.txt|meson\.build|conanfile\.(txt|py)|vcpkg\.json|Package\.swift|Podfile|Cartfile|pubspec\.yaml|pubspec\.lock|deps\.edn|project\.clj|.*\.cabal|stack\.yaml|DESCRIPTION|renv\.lock|cpanfile|dbt_project\.ya?ml|Makefile\.PL|AndroidManifest\.xml|project\.pbxproj|contents\.xcworkspacedata|Makefile|Dockerfile|Containerfile|.*\.tf|.*\.bicep|Pulumi\.ya?ml|template\.ya?ml)$'
+  | grep -Ei '(^|/)(package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.ya?ml|.*\.(cs|fs|vb)proj|.*\.sln|global\.json|packages\.lock\.json|Directory\.Build\.props|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|build\.sbt|go\.mod|go\.sum|Cargo\.toml|Cargo\.lock|rust-toolchain[^/]*|pyproject\.toml|requirements[^/]*\.txt|setup\.py|Pipfile|poetry\.lock|uv\.lock|Gemfile|Gemfile\.lock|.*\.gemspec|composer\.json|composer\.lock|mix\.exs|mix\.lock|rebar\.config|CMakeLists\.txt|meson\.build|conanfile\.(txt|py)|vcpkg\.json|Package\.swift|Podfile|Cartfile|pubspec\.yaml|pubspec\.lock|deps\.edn|project\.clj|.*\.cabal|stack\.yaml|DESCRIPTION|renv\.lock|cpanfile|dbt_project\.ya?ml|Makefile\.PL|AndroidManifest\.xml|project\.pbxproj|contents\.xcworkspacedata|justfile|Taskfile[^/]*|Makefile|Dockerfile|Containerfile|.*\.tf|.*\.bicep|Pulumi\.ya?ml|template\.ya?ml)$'
 ```
 
 Narrow or extend the pattern for the estate; the goal is a candidate list to read, not a
@@ -139,12 +145,22 @@ confirming it is not a secret store.
 Fallback without `rg`:
 
 ```sh
-grep -RIlE 'topic|queue|subscription|consumer|producer|dead[-_ ]?letter|exchange' "$repo" \
-  --exclude-dir=.git --exclude='.env*' --exclude-dir=secrets --exclude-dir=credentials \
-  --exclude='*.pem' --exclude='*.key' --exclude='*.p12' --exclude='*.tfstate*' \
-  --exclude='.npmrc' --exclude='.netrc' --exclude='.pgpass' \
+grep -rlIE 'topic|queue|subscription|consumer|producer|dead[-_ ]?letter|exchange' "$repo" \
+  --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor \
+  --exclude-dir=dist --exclude-dir=build --exclude-dir=target --exclude-dir=.venv \
+  --exclude-dir=secrets --exclude-dir=credentials \
+  --exclude='.env*' --exclude='*.env' --exclude='*.pem' --exclude='*.key' \
+  --exclude='*.p12' --exclude='*.jks' --exclude='*.pfx' \
+  --exclude='id_rsa' --exclude='id_ed25519' \
+  --exclude='*.tfstate*' --exclude='.npmrc' --exclude='.netrc' --exclude='.pgpass' \
   | head -100
 ```
+
+Use `-r`, not `-R`: recursive grep with `-R` follows symlinks and can read outside the
+repository. `-I` is also a GNU/BSD extension rather than POSIX; omit it where unsupported. The
+fallback does not apply `.gitignore`, so it can return candidates from untracked or ignored files;
+the excludes above only cover common dependency and build directories. Record the limitation if
+it changes the candidate set.
 
 ## Find configuration and secret keys (never values)
 
@@ -186,9 +202,12 @@ just the route.
 ## Search hygiene
 
 - Exclude `.git`, dependency directories, build output, binaries, key material (`*.pem`,
-  `*.key`, `*.p12`), credential files (`.npmrc`, `.netrc`, `.pgpass`), and infrastructure state
-  (`*.tfstate*`).
-- Prefer `git ls-files` or `rg --files` over recursive `find`; both respect ignore rules.
+  `*.key`, `*.p12`, `*.jks`, `*.pfx`), SSH private keys (`id_rsa`, `id_ed25519`), credential
+  files (`.npmrc`, `.netrc`, `.pgpass`), environment files (`.env*`, `*.env`), and
+  infrastructure state (`*.tfstate*`).
+- Prefer `git ls-files` for tracked files or `rg --files` for ignore-aware discovery over
+  recursive `find`. `git ls-files` lists tracked files even when `.gitignore` would match them;
+  `rg --files` applies `.gitignore`.
 - Bound output with `head` and record that the result was truncated.
 - Prefer `rg -l` / `grep -l` for config-adjacent searches; never print matching lines from
   `.env`, secret stores, or credential files.

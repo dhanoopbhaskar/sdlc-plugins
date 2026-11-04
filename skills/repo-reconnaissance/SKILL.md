@@ -1,7 +1,7 @@
 ---
 name: repo-reconnaissance
-description: "Performs a fast, read-only structural survey of a repository, monorepo, or multi-repo estate before a migration, replatform, or due-diligence assessment. Use when you need to inventory what is in a codebase, which stacks and versions it uses, how it builds, tests, and deploys, which deployable units exist, what should be excluded, or how to split a large repository into workable analysis shards. Produces a repository registry, stack map, and coverage ledger. Not for everyday code exploration, feature work, or behavior analysis."
-compatibility: "Requires read-only access to the target repositories. Designed to be used with legacy-code-discovery, system-cartography, and migration-seams from the same plugin."
+description: "Performs a fast, read-only structural survey of a repository, monorepo, or multi-repo estate before a migration, replatform, or due-diligence assessment. Use as the reconnaissance phase of legacy-code-discovery, or standalone when you need to inventory a codebase for migration scope: which stacks and versions it uses, how it builds, tests, and deploys, which deployable units exist, what should be excluded, or how to split a large repository into workable analysis shards. Prefer legacy-code-discovery when the request spans more than one phase or needs a durable bundle. Produces a repository registry, stack map, and coverage ledger. Not for everyday code exploration, feature work, or behavior analysis."
+compatibility: "Requires read access to the target repositories and write access only to the discovery bundle. Designed to be used with legacy-code-discovery, system-cartography, and migration-seams from the same plugin."
 ---
 
 # Repository Reconnaissance
@@ -50,6 +50,10 @@ proprietary indexer are evidence only when the query and the tool are recorded.
   multi-repo estate, the registry `# Identity` fields.
 - Discovery is only valid for a snapshot. Write the SHA into the ledger. If the working tree
   is dirty, record that too; analysis may describe uncommitted code.
+- A dirty file is a separate snapshot. Before citing a line range from it, record a snapshot SHA
+  (for tracked changes, `git stash create` produces one without touching the working tree; copy
+  untracked files or use a scratch worktree), or cite the path without a line range and grade
+  the claim `inferred`. Never point dirty line numbers at the clean `Commit`.
 - If a repository is unavailable, record it as `blocked` in `Status / notes` rather than silently
   omitting it.
 
@@ -94,7 +98,9 @@ For each package or project, find the **declared** stack:
 - Package registry and publishing configuration.
 
 If two sources disagree (for example a README says one version and the lockfile another),
-trust the build artifact, and record the discrepancy as a finding.
+trust the highest-authority source according to the version-authority order in
+[references/detection.md](references/detection.md) (lockfile, runtime pin, container base image,
+CI matrix, manifest range, README), and record the discrepancy as a finding.
 
 ### 5. Build, test, run, release
 
@@ -175,7 +181,7 @@ Every first-party path must appear in exactly one shard. Every shard gets:
 - The owning deployable.
 - A file count.
 - A depth (`surface`, `inventory`, `deep`).
-- A status (`pending` by default).
+- A state (`pending` by default).
 
 Record the plan in `ledger.md`. If a path is intentionally omitted, add a `skipped` row with
 the reason — do not leave a silent gap.
@@ -194,11 +200,11 @@ Write into the discovery bundle at `docs/discovery/` (or the path the user chose
 | Shard plan, census, exclusions, and inventory-only notes | Discovery Ledger | `ledger.md` |
 | Structural surprises | Open Question | `questions/<slug>.md` |
 
-Section ownership: reconnaissance contributes `# Context`, `# Stack and topology`,
-`# Deployable units`, `# Build and run`, and `# Deployment surface`; `system-cartography` owns
-`# Runtime shape`, `# Data landscape`, and `# External boundaries`; `migration-seams` owns
-`# Readiness`, `# Migration options`, `# Sequencing`, and `# Riskiest edges`; the parent owns
-`# Coverage` and `# Decision summary` and reconciles sections returned by shard workers.
+Section ownership is defined once in
+[`legacy-code-discovery/references/okf-bundle.md`](../legacy-code-discovery/references/okf-bundle.md#section-ownership).
+This phase contributes `# Context` (seeded from intent documents), `# Stack and topology`,
+`# Deployable units`, `# Build and run`, and `# Deployment surface`, and returns those fragments
+to the parent.
 
 Minimum frontmatter for each concept:
 
@@ -211,11 +217,11 @@ resource: https://github.com/acme/billing
 repo: acme-billing
 commit: 8f3c2a1b9d4e6f708192a3b4c5d6e7f80912a3b4
 evidence: confirmed
-generated: { by: repo-reconnaissance/0.2.0, at: 2026-11-03T10:00:00Z }
+generated: { by: repo-reconnaissance/0.2.1, at: 2026-11-03T10:00:00Z }
 status: draft
 sources:
   - id: src-1
-    resource: repo://acme-billing/pom.xml
+    resource: repo://acme-billing/pom.xml#L1-L40
     title: Build manifest
 ---
 ```
@@ -239,9 +245,13 @@ Do not report reconnaissance complete until all are true:
 - [ ] Stack and version claims point at a manifest or config file.
 - [ ] Build, test, run, lint, and release commands are recorded with their source in
       `# Build and run`.
-- [ ] Generated, vendored, and archived code is excluded from first-party shards with evidence;
-      generated code has a row in the ledger `# Inventory-only` table.
-- [ ] Coverage denominators and the coverage vector are written in the ledger.
+- [ ] Generated, vendored, archived, and fixture/test code is excluded from first-party shards
+      with evidence; generated code has a row in the ledger `# Inventory-only` table, and
+      behavior-bearing golden files are retained as evidence.
+- [ ] Coverage denominators reconnaissance can measure (repositories, deployables, first-party
+      paths) are written in the ledger; later-phase rows are marked `not yet measured`.
+- [ ] Evidence from a dirty working tree uses a snapshot SHA or path-only `inferred` citations,
+      never line ranges pointed at the clean `Commit`.
 - [ ] Unknowns are recorded as open questions, not omitted.
 
 ## Guardrails
@@ -269,10 +279,15 @@ Do not report reconnaissance complete until all are true:
 - `system-cartography` — next phase, dependency and behavior mapping.
 - `legacy-code-discovery` — orchestrator and bundle conventions.
 
-**Standalone use:** if the orchestrator is not available, create `docs/discovery/` and
-write `ledger.md`, `system.md`, and the bundle-root `index.md` and `log.md` if they are absent,
-using the templates in
+**Standalone use:** the shared reference files ship with this plugin. If a client installs this
+skill without its siblings, the Output contract and example frontmatter in this file are the
+minimum; treat cross-skill links as optional detail and apply OKF v0.2 from the `code-documenter`
+specification when available. If the orchestrator is not available, create `docs/discovery/` and
+write `ledger.md`, `system.md`, a minimal `charter.md` (scope, destination, and assumptions), and
+the bundle-root `index.md` and `log.md` if they are absent, using the templates in
 [`../legacy-code-discovery/references/okf-bundle.md`](../legacy-code-discovery/references/okf-bundle.md).
-Add every concept you write to `index.md` (or a linked subdirectory index) and append a dated
-entry to `log.md`. If that file is unavailable, apply OKF v0.2 from the
-[`code-documenter` specification](../code-documenter/references/SPEC.md).
+For a multi-repo estate, also create `repos/index.md` and one Repository Registry entry per
+repository; this phase owns the registry. This is a partial bundle: inventory and flow concepts
+are added by `system-cartography`. Add every concept you write to `index.md` (or a linked
+subdirectory index) and append a dated entry to `log.md`. If that file is unavailable, apply OKF
+v0.2 from the [`code-documenter` specification](../code-documenter/references/SPEC.md).

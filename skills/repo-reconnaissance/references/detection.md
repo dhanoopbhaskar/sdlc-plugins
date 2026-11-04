@@ -140,7 +140,7 @@ whether local patches must be carried forward.
 - Duplicate of another module with a "new"/"old" naming pair.
 - Tests excluded from CI.
 
-Record it as `skipped` in the ledger shard status or exclusion note, with evidence. Never delete
+Record it as `skipped` in the ledger shard state or exclusion note, with evidence. Never delete
 or exclude silently.
 
 ## Unknown stacks

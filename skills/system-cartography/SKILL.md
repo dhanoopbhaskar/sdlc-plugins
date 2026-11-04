@@ -1,7 +1,7 @@
 ---
 name: system-cartography
-description: "Maps the internal and external structure of a legacy system for a migration or due-diligence assessment: components, dependency edges, entry points, end-to-end flows, integration contracts, data ownership, and runtime topology. Use during a migration or due-diligence assessment when asked what depends on what, where requests and events go, or what data is shared. Works from source, build metadata, and contracts without assuming a tech stack. Not for routine code navigation or single-feature analysis."
-compatibility: "Requires read-only access to the target repositories. Consumes the shard plan from legacy-code-discovery and repo-reconnaissance; bundle conventions live in legacy-code-discovery/references/okf-bundle.md."
+description: "Maps the internal and external structure of a legacy system for a migration or due-diligence assessment: components, dependency edges, entry points, end-to-end flows, integration contracts, data ownership, and runtime topology. Use as the cartography phase of legacy-code-discovery, or standalone during a migration or due-diligence assessment when asked what depends on what, where requests and events go, or what data is shared. Prefer legacy-code-discovery when the request spans more than one phase or needs a durable bundle. Works from source, build metadata, and contracts without assuming a tech stack. Not for routine code navigation or single-feature analysis."
+compatibility: "Requires read access to the target repositories and write access only to the discovery bundle. Consumes the shard plan from legacy-code-discovery and repo-reconnaissance; bundle conventions live in legacy-code-discovery/references/okf-bundle.md."
 ---
 
 # System Cartography
@@ -21,7 +21,9 @@ only write target; if the target repository must remain untouched, write the bun
 
 - The discovery charter, ledger, and shard plan (from `legacy-code-discovery` /
   `repo-reconnaissance`). If they do not exist, run a quick reconnaissance first.
-- The pinned commit for every repository. Never mix snapshots.
+- The pinned commit for every repository. Never mix snapshots. If the ledger records a dirty
+  tree, treat working-tree evidence as a separate snapshot: cite a snapshot SHA, or grade the
+  claim `inferred` and cite the path without a line range.
 - The shard assigned to this pass, and its depth.
 
 ## Outcomes
@@ -36,8 +38,10 @@ only write target; if the target repository must remain untouched, write the bun
 
 ## Procedure
 
-Work breadth-first. At `inventory` depth, every component gets a concept and edges; at `deep`
-depth, the highest-risk components also get flows and behavior notes.
+Work breadth-first. At `inventory` depth, every component gets a concept and typed edges; record
+each cross-boundary edge on the component or in the system map, and mark an unknown contract or
+owner as an Open Question. At `deep` depth, the highest-risk components also get full Integration
+Boundary concepts, flows, and behavior notes.
 
 ### 1. Decompose into components
 
@@ -202,7 +206,8 @@ Write OKF v0.2 concepts into the discovery bundle. The default bundle root is
 
 Every concept needs `type`, `title`, `description`, `evidence`, `generated`, and `status`, plus
 `repo`, `commit`, and `shard` where applicable. Concepts making factual claims also need at
-least one `sources` entry, while Open Questions may omit it. `repo://` evidence needs a matching
+least one `sources` entry, while Open Questions and the aggregate `system.md` may omit it and
+link to the sourced concepts instead. `repo://` evidence needs a matching
 `commit` at the concept or source level. Use `repo://<slug>/<path>#L<a>-L<b>` for evidence. When
 a concept cites several repositories (for example a cross-repo Flow or Integration Boundary),
 omit the top-level `repo` and `commit` and carry them on each `sources` entry instead.
@@ -228,7 +233,7 @@ repo: acme-billing
 commit: 8f3c2a1b9d4e6f708192a3b4c5d6e7f80912a3b4
 shard: SH-004
 evidence: confirmed
-generated: { by: system-cartography/0.2.0, at: 2026-11-03T10:00:00Z }
+generated: { by: system-cartography/0.2.1, at: 2026-11-03T10:00:00Z }
 status: draft
 sources:
   - id: invoice-calculator
@@ -237,26 +242,37 @@ sources:
 ---
 ```
 
-`system.md` is shared. This skill owns its `# Runtime shape`, `# Data landscape`, and
-`# External boundaries` sections; create it from the System template when absent and update only
-those sections. When work is fanned out, shard workers return section fragments and the parent
-assembles `system.md`. `# Context`, `# Stack and topology`, `# Deployable units`, `# Build and
-run`, and `# Deployment surface` come from `repo-reconnaissance`; `# Readiness`, `# Migration
-options`, `# Sequencing`, and `# Riskiest edges` come from `migration-seams`; the parent owns
-`# Coverage` and `# Decision summary`.
+`system.md` is shared. This skill owns `# Runtime shape`, `# Data landscape`, and
+`# External boundaries`; create it from the System template when absent and update only those
+sections. Section ownership and the frontmatter update rule are defined once in
+[`legacy-code-discovery/references/okf-bundle.md`](../legacy-code-discovery/references/okf-bundle.md#section-ownership).
+When work is fanned out, shard workers return section fragments and the parent assembles
+`system.md` and owns its frontmatter.
 
 ## Completion gate
+
+Apply the checks for the shard's declared depth. A `surface` pass is reconnaissance, not
+cartography, and does not satisfy this gate.
+
+**At `inventory`:**
 
 - [ ] Every deployable has at least one Component concept with a public surface.
 - [ ] Every dependency edge has a type and a direction; cycles are listed.
 - [ ] Every entry point found in the shard has a handler location or an open question.
-- [ ] Every high-value flow has a happy path and a failure path.
-- [ ] Every boundary has a protocol, a contract location, and an owner (or an open question).
-- [ ] Every data store has writers, readers, and an ownership statement.
+- [ ] Every cross-boundary edge is recorded, with an Open Question for any contract or owner
+      that cannot be verified yet.
+- [ ] Every data store has writers, readers, and an ownership statement or an open question.
 - [ ] Cross-cutting concerns are recorded or explicitly marked absent.
 - [ ] Every component records observable signals or states that none exist.
 - [ ] `system.md` `# Runtime shape`, `# Data landscape`, and `# External boundaries` are updated.
 - [ ] Unresolved or dynamic edges are graded `inferred`/`unknown`, not silently resolved.
+
+**At `deep`, additionally:**
+
+- [ ] Every high-value flow has a happy path and a failure path.
+- [ ] Every cross-boundary edge with a verified contract has an Integration Boundary concept,
+      and every boundary has a protocol, a contract location, and an owner (or an open question).
+- [ ] Flows and behavior notes link to the Business Rule concepts they depend on.
 
 ## Guardrails
 
@@ -280,11 +296,16 @@ options`, `# Sequencing`, and `# Riskiest edges` come from `migration-seams`; th
 - `migration-seams` — turns this map into risk, coupling, and cutover decisions.
 - `legacy-code-discovery` — orchestrator and bundle conventions.
 
-**Standalone use:** if no bundle exists, create `docs/discovery/`, record the pinned commit and
-shard assumptions in `ledger.md`, and create the bundle-root `index.md`, `log.md`, and
-`system.md` (from the System template) if they are absent. Fill only the sections this skill
-owns, leaving reconnaissance and migration-seams sections for their phases. Write concepts using
-the templates in
+**Standalone use:** the shared reference files ship with this plugin. If a client installs this
+skill without its siblings, the Output contract and example frontmatter in this file are the
+minimum; treat cross-skill links as optional detail and apply OKF v0.2 from the `code-documenter`
+specification when available. If no bundle exists, create `docs/discovery/`, record the pinned commit and
+shard assumptions in `ledger.md`, and create a minimal `charter.md` (scope, destination, and
+assumptions), the bundle-root `index.md`, `log.md`, and `system.md` (from the System template)
+if they are absent. For a multi-repo estate, also create `repos/index.md` and one Repository
+Registry entry per repository, or record the missing registry as an Open Question. This is a
+partial bundle. Fill only the sections this skill owns, leaving reconnaissance and
+migration-seams sections for their phases. Write concepts using the templates in
 [`../legacy-code-discovery/references/okf-bundle.md`](../legacy-code-discovery/references/okf-bundle.md).
 Add every concept you write to `index.md` (or a linked subdirectory index) and append a dated
 entry to `log.md`. If that file is unavailable, apply OKF v0.2 from the

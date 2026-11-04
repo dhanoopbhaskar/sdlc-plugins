@@ -57,6 +57,7 @@ scripts/
   validate_skills.py      # Validates skill frontmatter, links, and version metadata
 tests/
   test_validate_skills.py # Tests the validator and its frontmatter parser
+  fixtures/okf-bundle/    # Minimal OKF bundle used by the conformance test
 .github/plugin/
   marketplace.json        # Plugin marketplace manifest for GitHub Copilot CLI
 .github/workflows/
@@ -73,10 +74,11 @@ python3 -m unittest discover -s tests -v
 ```
 
 The script validates Skill frontmatter, naming, relative and image links (including
-angle-bracket destinations and reference definitions, and bundle-absolute links inside OKF
-bundles), manifest shape and version metadata, and generated-actor versions.
-The tests cover the validator, its frontmatter parser, and its link, manifest, and version
-checks. The same checks run in CI on every push and pull request.
+angle-bracket destinations, reference definitions, heading anchors, and bundle-absolute links
+inside OKF bundles, while ignoring fenced/indented code and HTML comments), manifest shape and
+version metadata, and generated-actor versions.
+The tests cover the validator, its frontmatter parser, its link, manifest, and version checks,
+and a minimal OKF bundle fixture. The same checks run in CI on every push and pull request.
 
 When bumping the plugin version, update any concrete `generated.by` example actors in the
 skills; the validator fails when they drift from `plugin.json`.

@@ -161,10 +161,11 @@ These are enough to rank migration order without a full static-analysis platform
 | Who owns this table? | Write sites enumerated and consistent | One writer plus deploy config agrees | Package naming suggests it |
 | Is this rule real? | Code path plus test or observed output | Code path plus fixture | Comment or identifier only |
 
-If a behavioral claim cannot reach at least `corroborated`, it belongs in `questions/`, not in
-a component's behavior section. A dependency edge may be recorded as `inferred` when a direct
-signal exists, but a material inferred edge also needs an Open Question or validation experiment
-until a second independent signal raises it.
+A behavioral claim needs `confirmed` evidence before it appears in a component's behavior section;
+`corroborated` behavior is a hypothesis that belongs in `questions/` with a Validation Experiment.
+A dependency edge may be recorded as `inferred` or `corroborated` when the signals justify it, but
+a material inferred edge also needs an Open Question or validation experiment until evidence
+raises it to `confirmed`.
 
 ## Sampling rules
 
