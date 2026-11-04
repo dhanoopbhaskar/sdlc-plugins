@@ -12,6 +12,8 @@ status: draft
 sources:
   - id: calculator
     resource: repo://fixture/src/InvoiceCalculator.cs#L1-L20
+    repo: fixture
+    commit: 0123456789abcdef0123456789abcdef01234567
     title: Invoice calculation
 ---
 

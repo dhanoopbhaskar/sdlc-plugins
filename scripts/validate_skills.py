@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from html import unescape
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -58,13 +59,13 @@ INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 LIST_ITEM_RE = re.compile(r"^([ \t]*)((?:[-*+]|\d+[.)]))[ \t]+")
 HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+SETEXT_HEADING_RE = re.compile(r"^[ \t]{0,3}(?:=+|-+)[ \t]*$")
 HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 HTML_TAG_RE = re.compile(r"<[^>]*>")
 SEMVER_RE = re.compile(
-    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
-    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?"
-    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
 KEY_RE = re.compile(r"^([A-Za-z0-9_.-]+):(?:[ \t]*(.*))?$")
 BLOCK_RE = re.compile(r"^[|>]([+-]?)[ \t]*(?:#.*)?$")
@@ -299,12 +300,13 @@ def strip_fences(text: str) -> str:
 def strip_indented_code(text: str) -> str:
     """Remove CommonMark indented code blocks (four spaces or a tab).
 
-    A block only starts after a blank line and outside a list item, so nested
-    list content that happens to be indented is still scanned for links.
+    A block starts after a blank line and requires four spaces beyond the
+    containing list item's content indentation when nested in a list.
     """
     output: list[str] = []
     in_code = False
-    list_indent: int | None = None
+    list_indents: list[tuple[int, int]] = []
+    code_indent: int | None = None
     previous_blank = True
     for line in text.splitlines(keepends=True):
         if not line.strip():
@@ -314,46 +316,64 @@ def strip_indented_code(text: str) -> str:
             continue
 
         indent = len(line) - len(line.lstrip(" "))
-        if (
-            (indent >= 4 or line.startswith("\t"))
-            and previous_blank
-            and list_indent is None
-        ):
-            in_code = True
-            previous_blank = True
-            continue
+        if in_code:
+            if indent >= (code_indent or 0):
+                previous_blank = False
+                continue
+            in_code = False
+            code_indent = None
 
         marker = LIST_ITEM_RE.match(line)
         if marker is not None:
-            list_indent = (
-                len(marker.group(1).replace("\t", "    "))
-                + len(marker.group(2))
-                + 1
+            marker_indent = len(marker.group(1).replace("\t", "    "))
+            while list_indents and marker_indent < list_indents[-1][1]:
+                list_indents.pop()
+            content_indent = marker_indent + len(marker.group(2)) + 1
+            list_indents.append((marker_indent, content_indent))
+            output.append(line)
+            previous_blank = False
+            continue
+
+        while list_indents and indent < list_indents[-1][1]:
+            list_indents.pop()
+        list_indent = list_indents[-1][1] if list_indents else None
+        if (
+            previous_blank
+            and (
+                (list_indent is None and (indent >= 4 or line.startswith("\t")))
+                or (list_indent is not None and indent >= list_indent + 4)
             )
-            in_code = False
-            previous_blank = False
-            output.append(line)
+        ):
+            in_code = True
+            code_indent = 4 if list_indent is None else list_indent + 4
+            previous_blank = True
             continue
 
-        if list_indent is not None and indent >= list_indent:
-            in_code = False
-            previous_blank = False
-            output.append(line)
-            continue
-
-        if indent == 0:
-            list_indent = None
-        in_code = False
         previous_blank = False
         output.append(line)
 
     return "".join(output)
 
 
+def strip_html_comments(text: str) -> str:
+    """Remove HTML comments without treating comment delimiters in code as markup."""
+    code_spans: list[str] = []
+
+    def protect_code_span(match: re.Match[str]) -> str:
+        code_spans.append(match.group(0))
+        return f"\0{len(code_spans) - 1}\0"
+
+    text = INLINE_CODE_RE.sub(protect_code_span, text)
+    text = HTML_COMMENT_RE.sub("", text)
+    for index, code_span in enumerate(code_spans):
+        text = text.replace(f"\0{index}\0", code_span)
+    return text
+
+
 def strip_code(text: str) -> str:
     text = strip_fences(text)
-    text = HTML_COMMENT_RE.sub("", text)
     text = strip_indented_code(text)
+    text = strip_html_comments(text)
     return INLINE_CODE_RE.sub("", text)
 
 
@@ -437,9 +457,30 @@ def heading_slugs(text: str) -> set[str]:
     """Return GitHub-style anchor slugs for the headings in a Markdown document."""
     slugs: set[str] = set()
     counts: dict[str, int] = {}
-    for match in HEADING_RE.finditer(strip_fences(text)):
-        heading = HEADING_LINK_RE.sub(r"\1", match.group(2))
-        heading = HTML_TAG_RE.sub("", heading).replace("`", "").lower()
+    lines = strip_html_comments(strip_fences(text)).splitlines()
+    headings: list[str] = []
+    index = 0
+    while index < len(lines):
+        match = HEADING_RE.match(lines[index])
+        if match is not None:
+            headings.append(match.group(2))
+        elif (
+            index + 1 < len(lines)
+            and lines[index].strip()
+            and len(lines[index]) - len(lines[index].lstrip(" ")) <= 3
+            and SETEXT_HEADING_RE.match(lines[index + 1])
+        ):
+            headings.append(lines[index].strip())
+            index += 1
+        index += 1
+
+    for heading in headings:
+        heading = HEADING_LINK_RE.sub(r"\1", heading)
+        heading = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r"\1", heading)
+        heading = re.sub(r"\[([^\]]+)\]\[[^\]]*\]", r"\1", heading)
+        heading = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", heading)
+        heading = HTML_TAG_RE.sub("", heading).replace("`", "")
+        heading = unescape(heading).lower()
         heading = re.sub(r"[^\w\s-]", "", heading, flags=re.UNICODE)
         slug = re.sub(r"\s+", "-", heading.strip())
         if not slug:
@@ -452,6 +493,21 @@ def heading_slugs(text: str) -> set[str]:
         counts[slug] = count + 1
         slugs.add(candidate)
     return slugs
+
+
+def is_semver(version: str) -> bool:
+    match = SEMVER_RE.fullmatch(version)
+    if match is None:
+        return False
+    prerelease = match.group(4)
+    return prerelease is None or all(
+        not (
+            identifier.isdigit()
+            and len(identifier) > 1
+            and identifier.startswith("0")
+        )
+        for identifier in prerelease.split(".")
+    )
 
 
 def check_links(path: Path) -> None:
@@ -602,7 +658,7 @@ def check_versions() -> None:
     if not isinstance(version, str) or not version.strip():
         fail("plugin.json: missing or invalid 'version'")
         return
-    if SEMVER_RE.fullmatch(version) is None:
+    if not is_semver(version):
         fail(f"plugin.json: 'version' must be semantic versioning, got {version!r}")
         return
 

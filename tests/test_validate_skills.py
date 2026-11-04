@@ -348,6 +348,16 @@ class RepositoryChecksTests(unittest.TestCase):
             validator.check_links(doc)
         self.assertEqual(validator.errors, [])
 
+    def test_check_links_preserves_comment_delimiters_inside_code_spans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Path(tmp) / "doc.md"
+            doc.write_text(
+                "`<!--` [missing](nope.md) `-->`\n", encoding="utf-8"
+            )
+            validator.check_links(doc)
+        self.assertEqual(len(validator.errors), 1)
+        self.assertIn("unresolved link", validator.errors[0])
+
     def test_check_links_scans_nested_list_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -356,6 +366,37 @@ class RepositoryChecksTests(unittest.TestCase):
             doc.write_text("- item\n\n    [guide](guide.md)\n", encoding="utf-8")
             validator.check_links(doc)
         self.assertEqual(validator.errors, [])
+
+    def test_check_links_ignores_indented_code_inside_list_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Path(tmp) / "doc.md"
+            doc.write_text(
+                "- item\n\n      [missing](nope.md)\n", encoding="utf-8"
+            )
+            validator.check_links(doc)
+        self.assertEqual(validator.errors, [])
+
+    def test_check_links_scans_nested_list_paragraphs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Path(tmp) / "doc.md"
+            doc.write_text(
+                "- item\n\n    [missing](nope.md)\n", encoding="utf-8"
+            )
+            validator.check_links(doc)
+        self.assertEqual(len(validator.errors), 1)
+        self.assertIn("unresolved link", validator.errors[0])
+
+    def test_heading_slugs_handle_comments_setext_markup_and_collisions(self) -> None:
+        text = (
+            "<!--\n# Hidden\n-->\n"
+            "Overview\n========\n"
+            "# _Emphasized Overview_\n"
+            "# A\n# A\n# A-1\n"
+        )
+        self.assertEqual(
+            validator.heading_slugs(text),
+            {"overview", "emphasized-overview", "a", "a-1", "a-1-1"},
+        )
 
     def test_check_links_validates_angle_bracket_destinations(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -544,6 +585,12 @@ class RepositoryChecksTests(unittest.TestCase):
         self.assertTrue(
             any("semantic versioning" in error for error in validator.errors)
         )
+
+    def test_is_semver_validates_prerelease_and_build_identifiers(self) -> None:
+        self.assertTrue(validator.is_semver("1.2.3-rc.1+build.4"))
+        self.assertTrue(validator.is_semver("1.2.3+build.01"))
+        self.assertFalse(validator.is_semver("01.2.3"))
+        self.assertFalse(validator.is_semver("1.2.3-01"))
 
     def test_check_versions_reports_missing_changelog_section(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -838,13 +885,28 @@ class OkfBundleFixtureTests(unittest.TestCase):
                     r"at:\s*[^}]+\}\s*$",
                 )
                 if "repo://" in text:
-                    has_top_level = bool(fields.get("repo")) and bool(fields.get("commit"))
-                    has_source_level = bool(
-                        re.search(r"(?m)^\s+repo:\s*\S+", text)
-                    ) and bool(re.search(r"(?m)^\s+commit:\s*\S+", text))
-                    self.assertTrue(
-                        has_top_level or has_source_level,
-                        "repo:// evidence needs repo/commit at the concept or source level",
+                    source_entries = re.findall(
+                        r"(?ms)^  - id:\s*[^\n]+\n(.*?)(?=^  - id:|\Z)",
+                        frontmatter or "",
+                    )
+                    repo_sources = 0
+                    for entry in source_entries:
+                        resource = re.search(
+                            r"(?m)^\s+resource:\s*repo://([^/\s#]+)",
+                            entry,
+                        )
+                        if resource is None:
+                            continue
+                        repo_sources += 1
+                        repo = re.search(r"(?m)^\s+repo:\s*(\S+)", entry)
+                        commit = re.search(r"(?m)^\s+commit:\s*(\S+)", entry)
+                        self.assertIsNotNone(repo, "repo:// source needs its own repo field")
+                        self.assertIsNotNone(
+                            commit, "repo:// source needs its own commit field"
+                        )
+                        self.assertEqual(repo.group(1), resource.group(1))
+                    self.assertGreater(
+                        repo_sources, 0, "repo:// evidence needs source entries"
                     )
                     self.assertIn("sources:", text)
                 if path.name in ("charter.md", "ledger.md", "system.md"):
