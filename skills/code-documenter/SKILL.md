@@ -135,7 +135,7 @@ title: "payment-processor"
 description: "Handles payment transactions, validation, and settlement."
 resource: file:///path/to/payment_processor/__init__.py
 tags: [payments, core, billing]
-generated: { by: code-documenter/0.2.0, at: 2026-09-18T14:30:00Z }
+generated: { by: code-documenter/0.2.1, at: 2026-09-18T14:30:00Z }
 status: draft
 sources:
   - resource: file:///path/to/payment_processor/
@@ -168,7 +168,7 @@ title: "PaymentTransaction"
 description: "Represents a single payment transaction with metadata."
 resource: file:///path/to/payment_processor/models.py#PaymentTransaction
 tags: [models, payments]
-generated: { by: code-documenter/0.2.0, at: 2026-09-18T14:30:00Z }
+generated: { by: code-documenter/0.2.1, at: 2026-09-18T14:30:00Z }
 status: draft
 sources:
   - resource: file:///path/to/payment_processor/models.py
@@ -201,7 +201,7 @@ title: "process_payment"
 description: "Execute a payment transaction and return the result."
 resource: file:///path/to/payment_processor/api.py#process_payment
 tags: [api, payments, public]
-generated: { by: code-documenter/0.2.0, at: 2026-09-18T14:30:00Z }
+generated: { by: code-documenter/0.2.1, at: 2026-09-18T14:30:00Z }
 status: draft
 ---
 
@@ -271,7 +271,7 @@ Each generated concept includes:
 
 Example:
 ```yaml
-generated: { by: code-documenter/0.2.0, at: 2026-09-18T14:30:00Z }
+generated: { by: code-documenter/0.2.1, at: 2026-09-18T14:30:00Z }
 sources:
   - resource: file:///path/to/module.py
     id: source

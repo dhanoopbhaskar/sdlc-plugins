@@ -46,8 +46,9 @@ docs/discovery/
 
 Create only the directories that apply. Do not create empty directories just to match this
 tree. Subdirectory `index.md` files are optional: write one only when it will be linked from the
-parent index, otherwise link concepts directly. The discovery workflow always writes the
-bundle-root `index.md` and `log.md`.
+parent index, otherwise link concepts directly. Subdirectory indexes contain no frontmatter and
+carry only the section/list body; only the bundle-root `index.md` may declare `okf_version`
+(SPEC §8). The discovery workflow always writes the bundle-root `index.md` and `log.md`.
 
 ## Common frontmatter
 
@@ -90,9 +91,9 @@ Field rules:
 | `shard` | Ledger shard ID that produced the concept. For concepts assembled across shards (for example `system.md`), record the primary shard here and list the contributing shards in the body. |
 | `evidence` | `confirmed`, `corroborated`, `inferred`, or `unknown`. |
 | `generated` | `{ by: <actor>, at: <ISO 8601 with offset> }`. Required on write. Use `<skill>/<version>` with the plugin version from `plugin.json`; the phase skills show concrete examples. |
-| `verified` | `[{ by: <actor>, at: <ISO 8601> }]`; add only after a real check. Use `human:<id>` for human sign-off and `process:<id>` for automation. Never pre-populate. |
-| `status` | `draft` until a human reviews; then `stable`. Use `deprecated` instead of deleting. `needs-review` is a review note or tag, not a lifecycle status. |
-| `stale_after` | 90 days from generation is a sensible default. |
+| `verified` | `[{ by: <actor>, at: <ISO 8601> }]`; add only after a real check. Use `human:<id>` for human sign-off and `process:<id>` for automation. Never pre-populate. A verification event covers only the content it was applied to: clear it when the body or its cited sources change materially. |
+| `status` | `draft` until a human reviews; then `stable`. Use `deprecated` instead of deleting. `needs-review` is a review note or tag, not a lifecycle status. Return to `draft` when a material edit invalidates the prior review. |
+| `stale_after` | Optional absolute review date. Set it to the next review the charter or codebase cadence calls for, or to `generated.at` + 90 days. A concept without it is not stale, just unscheduled. |
 
 A single verification event may be written as a mapping rather than a list, but the list form is
 preferred:
@@ -118,11 +119,23 @@ repo://<repo-slug>/<path>#L<a>-L<b>
   the source entry when the concept spans repositories. In a single-repository estate with no
   registry entry, use a stable slug (usually the directory name) and record the same value in
   every concept's `repo` field.
-- `<path>` is relative to the repository root.
+- `<path>` is relative to the repository root and is percent-encoded where needed so a path
+  containing spaces, `#`, `?`, or `%` stays unambiguous. Do not percent-encode the path
+  separators or the line-range fragment. Decode percent-encoded paths before resolving them on
+  disk.
 - Resolve the URI against the registry entry's `resource` and the `commit` on the same concept
-  or source entry: on a git host, `<resource>/blob/<commit>/<path>#L<a>-L<b>`. In a single-repo
-  bundle, resolve it against the repository root recorded in the ledger. For an artifact with no
-  remote, record its absolute URL instead.
+  or source entry, using the host's commit-pinned URL form and line-range anchor. The `repo://`
+  fragment above is host-neutral; translate it, do not copy it:
+  - GitHub: `<resource>/blob/<commit>/<path>#L<a>-L<b>`
+  - GitLab: `<resource>/-/blob/<commit>/<path>#L<a>-<b>`
+  - Bitbucket: `<resource>/src/<commit>/<path>#lines-<a>:<b>`
+  - Azure DevOps: `<resource>?path=/<path>&version=GC<commit>&line=<a>&lineEnd=<b>`
+  In a single-repo bundle, resolve it against the repository root recorded in the ledger. For an
+  artifact with no remote, record its absolute URL instead.
+- If the working tree is dirty, a `repo://` line range must resolve against a snapshot of that
+  tree, not the recorded `Commit`. Record the snapshot SHA (for tracked changes, `git stash
+  create` produces one without touching the working tree), or cite the path without a line
+  range and grade the claim `inferred`. Never point dirty line numbers at a clean commit.
 - `repo://` is a discovery extension, not an OKF standard scheme. When a consumer cannot
   resolve it, the path plus the `repo` and `commit` fields are still readable; never encode
   credentials, tokens, or personal data in the URI. A bundle that must be consumed by strict
@@ -163,7 +176,7 @@ Invoices are rounded half-up at the line level, then summed.[^billing-rounding]
 | Grade | Meaning | May support |
 | --- | --- | --- |
 | `confirmed` | Read directly, ran a read-only command, or saw an authoritative artifact. | Any conclusion. |
-| `corroborated` | Two or more independent indirect signals agree. | Inventory and structure; validate behavior. |
+| `corroborated` | Two or more independent indirect signals agree. | Inventory and structure; a behavior claim still needs `confirmed` or a Validation Experiment. |
 | `inferred` | Naming, convention, folder structure, or a single weak signal. | A hypothesis that needs a validation experiment. |
 | `unknown` | No reliable evidence. | An open question. |
 
@@ -171,11 +184,15 @@ A concept's grade is the **weakest grade of its load-bearing claims**, not the a
 Behavioral claims (business rules, data ownership, runtime semantics) must be `confirmed` or
 explicitly framed as a hypothesis.
 
-Process documents (Discovery Charter, Discovery Ledger) record user answers, scope, and
-planning state. They may use `confirmed` for a direct answer or an observed process fact, but
-an unanswered question is not a confirmed claim; record it in `questions/` and keep the
-assumption in the charter. The `evidence` values shown in the templates below are
-placeholders: compute the weakest grade instead of copying a template value.
+Process and aggregate documents (Discovery Charter, Discovery Ledger, System) record user
+answers, scope, planning state, and synthesized findings. Grade them by the weakest planning or
+load-bearing claim they contain, not by the document's authorship. `System` is an aggregate map:
+it links to the Component, Flow, Data Store, Risk, and Seam concepts that carry the evidence
+instead of duplicating their `sources`. A ledger that records unknown or blocked work is
+`unknown` at the concept level even when individual rows are confirmed; use the row-level
+`Evidence` column for local confidence. An unanswered question is not a confirmed claim: record
+it in `questions/` and keep the assumption in the charter. The `evidence` values shown in the
+templates below are placeholders: compute the weakest grade instead of copying a template value.
 
 ## Concept types and body templates
 
@@ -190,7 +207,7 @@ apply, and replace `<writer>` with the skill that produced the concept.
 type: Discovery Charter
 title: Discovery Charter — <estate>
 description: Destination, scope, constraints, and success criteria for this discovery.
-evidence: confirmed
+evidence: <weakest grade of the charter's planning claims>
 generated: { by: <writer>/<version>, at: ... }
 status: draft
 ---
@@ -233,8 +250,8 @@ status: draft
 ---
 type: Discovery Ledger
 title: Discovery Coverage Ledger
-description: Shard plan, depth, status, and coverage accounting for this discovery.
-evidence: confirmed
+description: Shard plan, depth, state, and coverage accounting for this discovery.
+evidence: <weakest grade of the ledger's planning claims>
 generated: { by: <writer>/<version>, at: ... }
 status: draft
 ---
@@ -250,15 +267,22 @@ when it differs. `Dirty` records whether the working tree differs from `Commit`;
 records `active`, `blocked`, `archived`, or a short explanation.
 
 # Shards
-| ID | Repo | Paths / glob | Deployable unit | Files | Depth | Status | Owner | Started | Lease expires | Evidence | Updated | Notes |
+| ID | Repo | Paths / glob | Deployable unit | Files | Depth | Shard state | Owner | Started | Lease expires | Evidence | Updated | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
-Status: `pending` | `in-progress` | `done` | `partial` | `blocked` | `skipped` | `deprecated`.
+Shard state: `pending` | `in-progress` | `done` | `partial` | `blocked` | `skipped` | `deprecated`.
 Depth: `surface` | `inventory` | `deep`.
+
+`Shard state` is the scheduler state and is distinct from a concept's OKF lifecycle `status`
+(`draft` | `stable` | `deprecated`).
 
 `Owner` and `Started` are set when a shard moves to `in-progress`; `Lease expires` is a
 heartbeat, with the default lease defined in [scale.md](scale.md) §4. A shard whose lease has
-expired may be reclaimed.
+expired may be reclaimed. The parent reserves the row before spawning a worker; the worker
+refreshes `Lease expires` while it holds the shard.
+
+`Evidence` is the lowest evidence grade among the concepts the shard produced, or `unknown`
+while the shard is `pending`.
 
 `Notes` is mandatory for `partial`, `blocked`, `skipped`, and `deprecated`: record what remains,
 the blocker, the exclusion reason, or the replacement shard. A split parent row becomes
@@ -274,6 +298,7 @@ the blocker, the exclusion reason, or the replacement shard. A split parent row 
 - Path coverage: n / N first-party paths assigned to a `done` shard
 - Paths never opened: <list or glob>
 - Sampling: <method, sample size, and covered paths; if used>
+- Later-phase rows this phase cannot measure yet: `not yet measured` (name the owning phase)
 
 # Budget
 <time/token budget agreed, spent, and remaining>
@@ -281,6 +306,8 @@ the blocker, the exclusion reason, or the replacement shard. A split parent row 
 # Exclusions
 - Generated: <globs> — detail each generated area in `# Inventory-only`
 - Vendored / third-party: <globs>
+- Fixtures / test data: <globs> — excluded from the shard denominator; behavior-bearing
+  golden files, snapshots, and contract fixtures are retained as evidence for cartography
 - Archived or unused: <globs, with evidence>
 
 # Inventory-only
@@ -350,7 +377,7 @@ status: draft
 ---
 
 # Context
-<users, business purpose, external actors>
+<users, business purpose, external actors; cite intent docs, or mark unknown>
 
 # Stack and topology
 Topology: <single project | monorepo | polyrepo | hybrid>; workspace roots: <paths>
@@ -381,17 +408,29 @@ Topology: <single project | monorepo | polyrepo | hybrid>; workspace roots: <pat
 | Boundary | Direction | Protocol | Contract | Owner |
 | --- | --- | --- | --- | --- |
 
+# Coupling
+Hotspots ranked by **blast radius × change frequency**; record the per-component detail in the
+Component concept and the estate-level summary here.
+
+| Component / unit | Signal | Fan-in / fan-out | Evidence | Migration consequence |
+| --- | --- | --- | --- | --- |
+| <unit> | cycle / shared data / duplicated logic / version skew / shared config / cross-deployable transaction / god module | <counts> | <repo:// path#Lx-Ly> | <what it forces> |
+
+Atomic groups that cannot move independently are recorded under `# Sequencing`.
+
 # Readiness
 | Unit | Build | Run | Test | Observe | Document | Data | Owner | Blocking gaps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 # Migration options
-| Option | Evidence for | Evidence against | Scope / affected units |
-| --- | --- | --- | --- |
+| Unit / atomic group | Option | Evidence for | Evidence against | Scope / affected units |
+| --- | --- | --- | --- | --- |
 
 # Sequencing
-| Order | Slice | Seam | Proves | Does not prove | Prerequisites | Rollback |
-| --- | --- | --- | --- | --- | --- | --- |
+Atomic groups: <components that must move together, and why>
+
+| Order | Slice | Seam | Proves | Does not prove | Prerequisites | Owner | Rollback |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
 # Riskiest edges
 <links to risk concepts, one line each>
@@ -403,14 +442,27 @@ Topology: <single project | monorepo | polyrepo | hybrid>; workspace roots: <pat
 <one-page map, top findings with evidence, coverage statement, ranked risks, ranked open questions, and recommended next experiments or decisions>
 ```
 
-Readiness, options, and sequencing are required once `migration-seams` has run.
+Coupling, readiness, options, and sequencing are required once `migration-seams` has run.
 
-Section ownership: `repo-reconnaissance` owns `# Context`, `# Stack and topology`,
-`# Deployable units`, `# Build and run`, and `# Deployment surface`; `system-cartography` owns
-`# Runtime shape`, `# Data landscape`, and `# External boundaries`; `migration-seams` owns
-`# Readiness`, `# Migration options`, `# Sequencing`, and `# Riskiest edges`; the orchestrating
-parent owns `# Coverage` and `# Decision summary` and reconciles the sections returned by shard
-workers.
+`system.md` is an aggregate document: it links to the sourced concepts it summarizes instead of
+carrying its own `sources` list.
+
+#### Section ownership
+
+This table is the single source of truth; phase skills link here instead of restating it.
+
+| Section | Owner |
+| --- | --- |
+| `# Context` | `repo-reconnaissance`, seeded from intent documents and marked unknown where absent |
+| `# Stack and topology`, `# Deployable units`, `# Build and run`, `# Deployment surface` | `repo-reconnaissance` |
+| `# Runtime shape`, `# Data landscape`, `# External boundaries` | `system-cartography` |
+| `# Coupling`, `# Readiness`, `# Migration options`, `# Sequencing`, `# Riskiest edges` | `migration-seams` |
+| `# Coverage`, `# Decision summary`, frontmatter | orchestrating parent |
+
+The parent reconciles the sections returned by shard workers. It also owns `system.md`
+frontmatter: keep the original `generated.by`, bump `generated.at`, recompute `evidence` from the
+weakest load-bearing claim, and clear `verified` on a material change. In standalone phase use,
+the phase skill that materially edits `system.md` applies the same rule.
 
 ### Component
 
@@ -821,8 +873,9 @@ status: draft
   Boundary concepts; `questions/` holds Open Question and Validation Experiment concepts.
   Suffix by concept kind when two would collide: `invoice-creation-entry.md`,
   `invoice-creation-flow.md`, `erp-export-question.md`, `erp-export-experiment.md`.
-- Link with bundle-absolute paths: `[Invoice Calculator](/inventory/invoice-calculator.md)`.
-  Relative links are acceptable inside a sub-bundle.
+- Link with bundle-absolute paths in concept bodies:
+  `[Invoice Calculator](/inventory/invoice-calculator.md)`. Relative links are acceptable in
+  `index.md` files and inside a sub-bundle.
 - Every concept must be reachable from `index.md` or from a parent concept. No orphans.
 - One concept per file. If a file grows past roughly 200 lines, split it and link the parts.
 - Express relationships in prose around the link ("calls", "owns", "publishes to"); OKF links
@@ -898,8 +951,11 @@ The slugs above are illustrative; use your real concept slugs. If you write subd
 4. **Conflicts are data.** If two shards disagree, keep both claims with evidence and raise an
    Open Question; do not pick the more plausible one silently.
 5. **Bump `generated.at`** on every meaningful edit. Append to `log.md`.
-6. **Re-verify, don't assume.** After a code change, re-read the cited lines before keeping
-   `verified`. Otherwise mark the concept stale via `stale_after` or the ledger.
+6. **Re-verify, don't assume.** After a code change, re-read the cited lines. If the body or
+   cited evidence changed materially, clear `verified` and set `status: draft` so the prior
+   check cannot outlive the content it covered. If the content is unchanged and the cited lines
+   still match, keeping `verified` is allowed; otherwise mark the concept stale via `stale_after`
+   or the ledger.
 7. **No secrets, no personal data.** Record key names and locations only.
 
 ## Conformance checklist
@@ -908,10 +964,16 @@ The slugs above are illustrative; use your real concept slugs. If you write subd
 - [ ] Root `index.md` declares `okf_version: "0.2"`.
 - [ ] `index.md` and `log.md` follow the section/date formats.
 - [ ] Every concept has `generated`; concepts making factual claims have at least one
-      `sources` entry.
+      `sources` entry, except process and aggregate documents (`charter.md`, `ledger.md`,
+      `system.md`), which link to their sources or supporting concepts instead.
 - [ ] `repo://` sources carry matching `repo` and `commit` fields — at the concept level when
       all sources share a repository, otherwise on each source — or use a resolvable URL.
+- [ ] No `repo://` line range from a dirty working tree points at a clean `commit`; dirty
+      evidence uses a snapshot SHA or is graded `inferred` with a path-only citation.
 - [ ] No concept claims `verified` without a recorded check; `verified` is a `{ by, at }` event,
       never a bare `true`.
 - [ ] Links resolve, or are intentionally forward references to concepts still to be written.
-- [ ] Coverage and exclusions are stated in `ledger.md`.
+- [ ] Coverage and exclusions are stated in `ledger.md`; sections not measured by a phase are
+      marked `not yet measured` rather than implied complete.
+- [ ] `stale_after` is set where the charter defines a review cadence; otherwise its absence is
+      deliberate, not an omission.

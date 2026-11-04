@@ -5,14 +5,15 @@ Dependency-free checks:
 
 * Every ``skills/<name>/SKILL.md`` has parseable frontmatter with the required
   ``name`` and ``description`` fields, follows the Agent Skills naming rules,
-  and stays within the documented length and body-size limits. Frontmatter is
+  and warns when the body exceeds the recommended length. Frontmatter is
   parsed as a simple YAML mapping without external dependencies; unsupported
   constructs fail loudly instead of being silently truncated.
 * Relative Markdown links and images in skills and the README resolve, including
-  angle-bracket destinations and reference definitions. Bundle-absolute OKF links
-  (``/path``) resolve when a bundle root (an ``index.md`` with ``okf_version``)
-  is found, and are ignored otherwise. Links inside fenced code blocks, URLs,
-  template placeholders, and footnote definitions are ignored.
+  angle-bracket destinations, reference definitions, and heading anchors. Bundle-absolute OKF
+  links (``/path``) resolve when a bundle root (an ``index.md`` with ``okf_version``)
+  is found, and are ignored otherwise. Links inside fenced and indented code
+  blocks, HTML comments, URLs, template placeholders, and footnote definitions
+  are ignored.
 * ``plugin.json``, ``.github/plugin/marketplace.json``, and ``CHANGELOG.md``
   agree on the current version; required manifest fields are present; and
   concrete ``generated``/``author`` actor versions in skills match that version.
@@ -30,6 +31,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = ROOT / "skills"
@@ -53,6 +55,12 @@ FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 FENCE_CLOSE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*$")
 PLACEHOLDER_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+LIST_ITEM_RE = re.compile(r"^([ \t]*)((?:[-*+]|\d+[.)]))[ \t]+")
+HEADING_RE = re.compile(r"(?m)^[ \t]{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+HTML_TAG_RE = re.compile(r"<[^>]*>")
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 KEY_RE = re.compile(r"^([A-Za-z0-9_.-]+):(?:[ \t]*(.*))?$")
 BLOCK_RE = re.compile(r"^[|>]([+-]?)[ \t]*(?:#.*)?$")
 ACTOR_VERSION_RE = re.compile(
@@ -283,8 +291,65 @@ def strip_fences(text: str) -> str:
     return "".join(output)
 
 
+def strip_indented_code(text: str) -> str:
+    """Remove CommonMark indented code blocks (four spaces or a tab).
+
+    A block only starts after a blank line and outside a list item, so nested
+    list content that happens to be indented is still scanned for links.
+    """
+    output: list[str] = []
+    in_code = False
+    list_indent: int | None = None
+    previous_blank = True
+    for line in text.splitlines(keepends=True):
+        if not line.strip():
+            if not in_code:
+                output.append(line)
+            previous_blank = True
+            continue
+
+        indent = len(line) - len(line.lstrip(" "))
+        if (
+            (indent >= 4 or line.startswith("\t"))
+            and previous_blank
+            and list_indent is None
+        ):
+            in_code = True
+            previous_blank = True
+            continue
+
+        marker = LIST_ITEM_RE.match(line)
+        if marker is not None:
+            list_indent = (
+                len(marker.group(1).replace("\t", "    "))
+                + len(marker.group(2))
+                + 1
+            )
+            in_code = False
+            previous_blank = False
+            output.append(line)
+            continue
+
+        if list_indent is not None and indent >= list_indent:
+            in_code = False
+            previous_blank = False
+            output.append(line)
+            continue
+
+        if indent == 0:
+            list_indent = None
+        in_code = False
+        previous_blank = False
+        output.append(line)
+
+    return "".join(output)
+
+
 def strip_code(text: str) -> str:
-    return INLINE_CODE_RE.sub("", strip_fences(text))
+    text = strip_fences(text)
+    text = HTML_COMMENT_RE.sub("", text)
+    text = strip_indented_code(text)
+    return INLINE_CODE_RE.sub("", text)
 
 
 def normalize_label(label: str) -> str:
@@ -363,6 +428,23 @@ def find_bundle_root(start: Path) -> Path | None:
     return None
 
 
+def heading_slugs(text: str) -> set[str]:
+    """Return GitHub-style anchor slugs for the headings in a Markdown document."""
+    slugs: set[str] = set()
+    counts: dict[str, int] = {}
+    for match in HEADING_RE.finditer(strip_fences(text)):
+        heading = HEADING_LINK_RE.sub(r"\1", match.group(2))
+        heading = HTML_TAG_RE.sub("", heading).replace("`", "").lower()
+        heading = re.sub(r"[^\w\s-]", "", heading, flags=re.UNICODE)
+        slug = re.sub(r"\s+", "-", heading.strip())
+        if not slug:
+            continue
+        count = counts.get(slug, 0)
+        counts[slug] = count + 1
+        slugs.add(slug if count == 0 else f"{slug}-{count}")
+    return slugs
+
+
 def check_links(path: Path) -> None:
     try:
         body = strip_code(path.read_text(encoding="utf-8-sig"))
@@ -370,6 +452,19 @@ def check_links(path: Path) -> None:
         fail(f"{display_path(path)}: cannot read: {exc}")
         return
     bundle_root: Path | None = None
+
+    def check_fragment(target: Path, fragment: str) -> None:
+        if not fragment:
+            return
+        try:
+            text = target.read_text(encoding="utf-8-sig")
+        except OSError:
+            return
+        if unquote(fragment) not in heading_slugs(text):
+            fail(
+                f"{display_path(path)}: unresolved anchor #{fragment} "
+                f"in {display_path(target)}"
+            )
 
     def check_target(target: str) -> None:
         nonlocal bundle_root
@@ -382,10 +477,14 @@ def check_links(path: Path) -> None:
                 return
             target = inner
         if not target or target.startswith(
-            ("#", "http://", "https://", "mailto:", "data:")
+            ("http://", "https://", "mailto:", "data:")
         ):
             return
-        target_path = target.split("#", 1)[0].split("?", 1)[0]
+        if target.startswith("#"):
+            check_fragment(path, target[1:])
+            return
+        target_path, _, fragment = target.partition("#")
+        target_path = target_path.split("?", 1)[0]
         if not target_path:
             return
         if target_path.startswith("/"):
@@ -399,6 +498,8 @@ def check_links(path: Path) -> None:
             resolved = (path.parent / target_path).resolve()
         if not resolved.exists():
             fail(f"{display_path(path)}: unresolved link {target_path!r}")
+        elif fragment and resolved.suffix.lower() == ".md":
+            check_fragment(resolved, fragment)
 
     for match in LINK_RE.finditer(body):
         check_target(match.group(1))
@@ -478,33 +579,45 @@ def check_skill(skill_md: Path) -> str:
 
 
 def check_versions() -> None:
-    plugin_path = ROOT / "plugin.json"
-    market_path = ROOT / ".github" / "plugin" / "marketplace.json"
-
-    try:
-        plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        fail(f"plugin.json: cannot parse: {exc}")
+    plugin = _read_json_object(ROOT / "plugin.json", "plugin.json")
+    if plugin is None:
         return
-    try:
-        market = json.loads(market_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        fail(f".github/plugin/marketplace.json: cannot parse: {exc}")
+    market = _read_json_object(
+        ROOT / ".github" / "plugin" / "marketplace.json",
+        ".github/plugin/marketplace.json",
+    )
+    if market is None:
         return
 
     version = plugin.get("version")
-    if not version:
-        fail("plugin.json: missing 'version'")
+    if not isinstance(version, str) or not version.strip():
+        fail("plugin.json: missing or invalid 'version'")
+        return
+    if SEMVER_RE.fullmatch(version) is None:
+        fail(f"plugin.json: 'version' must be semantic versioning, got {version!r}")
         return
 
-    market_version = market.get("metadata", {}).get("version")
-    if market_version != version:
-        fail(
-            "version mismatch: plugin.json "
-            f"{version!r} vs marketplace metadata {market_version!r}"
-        )
+    metadata = market.get("metadata")
+    if not isinstance(metadata, dict):
+        fail(".github/plugin/marketplace.json: 'metadata' must be an object")
+    else:
+        market_version = metadata.get("version")
+        if market_version != version:
+            fail(
+                "version mismatch: plugin.json "
+                f"{version!r} vs marketplace metadata {market_version!r}"
+            )
 
-    for entry in market.get("plugins", []):
+    plugins = market.get("plugins")
+    if not isinstance(plugins, list):
+        fail(".github/plugin/marketplace.json: 'plugins' must be an array")
+        return
+    for index, entry in enumerate(plugins):
+        if not isinstance(entry, dict):
+            fail(
+                f".github/plugin/marketplace.json: plugins[{index}] must be an object"
+            )
+            continue
         if entry.get("version") != version:
             fail(
                 "version mismatch: plugin.json "
@@ -598,12 +711,11 @@ def check_actor_versions(version: str | None = None) -> None:
     plugin release.
     """
     if version is None:
-        try:
-            plugin = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        plugin = _read_json_object(ROOT / "plugin.json", "plugin.json")
+        if plugin is None:
             return
         version = plugin.get("version")
-    if not version or not SKILLS_DIR.is_dir():
+    if not isinstance(version, str) or not version.strip() or not SKILLS_DIR.is_dir():
         return
 
     skill_names = {path.name for path in SKILLS_DIR.iterdir() if path.is_dir()}

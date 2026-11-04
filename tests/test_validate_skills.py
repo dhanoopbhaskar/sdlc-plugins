@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -247,6 +248,7 @@ class RepositoryChecksTests(unittest.TestCase):
             (root / "image.png").write_bytes(b"")
             doc = root / "doc.md"
             doc.write_text(
+                "# Section\n\n"
                 "[ok](other.md)\n"
                 "[anchor](#section)\n"
                 "[web](https://example.com)\n"
@@ -257,6 +259,35 @@ class RepositoryChecksTests(unittest.TestCase):
             )
             validator.check_links(doc)
         self.assertEqual(validator.errors, [])
+
+    def test_check_links_accepts_existing_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "other.md").write_text(
+                "# Overview\n\n## Scoring anchors\n", encoding="utf-8"
+            )
+            doc = root / "doc.md"
+            doc.write_text("[x](other.md#scoring-anchors)\n", encoding="utf-8")
+            validator.check_links(doc)
+        self.assertEqual(validator.errors, [])
+
+    def test_check_links_reports_missing_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "other.md").write_text("# Overview\n", encoding="utf-8")
+            doc = root / "doc.md"
+            doc.write_text("[x](other.md#missing)\n", encoding="utf-8")
+            validator.check_links(doc)
+        self.assertEqual(len(validator.errors), 1)
+        self.assertIn("unresolved anchor", validator.errors[0])
+
+    def test_check_links_reports_missing_local_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Path(tmp) / "doc.md"
+            doc.write_text("# Overview\n\n[x](#missing)\n", encoding="utf-8")
+            validator.check_links(doc)
+        self.assertEqual(len(validator.errors), 1)
+        self.assertIn("unresolved anchor", validator.errors[0])
 
     def test_check_links_reports_missing_image(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -294,6 +325,35 @@ class RepositoryChecksTests(unittest.TestCase):
             doc.write_text(
                 "````\n```\n[missing](nope.md)\n```\n````\n", encoding="utf-8"
             )
+            validator.check_links(doc)
+        self.assertEqual(validator.errors, [])
+
+    def test_check_links_ignores_indented_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Path(tmp) / "doc.md"
+            doc.write_text(
+                "Example:\n\n    [missing](nope.md)\n    - [also missing](nope.md)\n\nAfter.\n",
+                encoding="utf-8",
+            )
+            validator.check_links(doc)
+        self.assertEqual(validator.errors, [])
+
+    def test_check_links_ignores_html_comments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Path(tmp) / "doc.md"
+            doc.write_text(
+                "<!-- [missing](nope.md) -->\n[ok](https://example.com)\n",
+                encoding="utf-8",
+            )
+            validator.check_links(doc)
+        self.assertEqual(validator.errors, [])
+
+    def test_check_links_scans_nested_list_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "guide.md").write_text("# Guide\n", encoding="utf-8")
+            doc = root / "doc.md"
+            doc.write_text("- item\n\n    [guide](guide.md)\n", encoding="utf-8")
             validator.check_links(doc)
         self.assertEqual(validator.errors, [])
 
@@ -475,6 +535,16 @@ class RepositoryChecksTests(unittest.TestCase):
                 validator.check_versions()
         self.assertTrue(any("version mismatch" in error for error in validator.errors))
 
+    def test_check_versions_rejects_non_semver_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_versions(root, "1.0", "1.0", "1.0", "## [1.0]\n")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("semantic versioning" in error for error in validator.errors)
+        )
+
     def test_check_versions_reports_missing_changelog_section(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -491,6 +561,74 @@ class RepositoryChecksTests(unittest.TestCase):
             with mock.patch.object(validator, "ROOT", root):
                 validator.check_versions()
         self.assertTrue(any("cannot read" in error for error in validator.errors))
+
+    def test_check_versions_reports_non_object_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_versions(root, "1.0.0", "1.0.0", "1.0.0", "## [1.0.0]\n")
+            (root / "plugin.json").write_text("[]", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("plugin.json" in error and "JSON object" in error for error in validator.errors)
+        )
+
+    def test_check_versions_reports_non_object_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_versions(root, "1.0.0", "1.0.0", "1.0.0", "## [1.0.0]\n")
+            market = root / ".github" / "plugin" / "marketplace.json"
+            market.write_text(
+                json.dumps({"metadata": [], "plugins": []}), encoding="utf-8"
+            )
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("'metadata' must be an object" in error for error in validator.errors)
+        )
+
+    def test_check_versions_reports_non_array_plugins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_versions(root, "1.0.0", "1.0.0", "1.0.0", "## [1.0.0]\n")
+            market = root / ".github" / "plugin" / "marketplace.json"
+            market.write_text(
+                json.dumps({"metadata": {"version": "1.0.0"}, "plugins": {}}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("'plugins' must be an array" in error for error in validator.errors)
+        )
+
+    def test_check_versions_reports_non_object_plugin_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_versions(root, "1.0.0", "1.0.0", "1.0.0", "## [1.0.0]\n")
+            market = root / ".github" / "plugin" / "marketplace.json"
+            market.write_text(
+                json.dumps({"metadata": {"version": "1.0.0"}, "plugins": ["bad"]}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("plugins[0] must be an object" in error for error in validator.errors)
+        )
+
+    def test_check_actor_versions_reports_non_object_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "skills" / "demo-skill").mkdir(parents=True)
+            (root / "plugin.json").write_text("[]", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root), mock.patch.object(
+                validator, "SKILLS_DIR", root / "skills"
+            ):
+                validator.check_actor_versions()
+        self.assertTrue(
+            any("plugin.json" in error and "JSON object" in error for error in validator.errors)
+        )
 
     def _write_actor(
         self, root: Path, skill: str, version: str, plugin_version: str
@@ -629,6 +767,115 @@ class RepositoryChecksTests(unittest.TestCase):
                 validator.check_manifest_shapes()
         self.assertTrue(any("mcpServers" in error for error in validator.errors))
 
+
+class OkfBundleFixtureTests(unittest.TestCase):
+    def setUp(self) -> None:
+        validator.errors.clear()
+        validator.warnings.clear()
+
+    def tearDown(self) -> None:
+        validator.errors.clear()
+        validator.warnings.clear()
+
+    def test_minimal_fixture_bundle_is_conformant(self) -> None:
+        """The fixture is deliberately minimal: it exercises packaging, not every template section."""
+        root = validator.ROOT / "tests" / "fixtures" / "okf-bundle"
+
+        index_frontmatter = validator.read_frontmatter(root / "index.md")
+        self.assertIsNotNone(index_frontmatter)
+        index_fields = validator.parse_frontmatter(index_frontmatter or "")
+        self.assertEqual(index_fields.get("okf_version"), "0.2")
+
+        index_text = (root / "index.md").read_text(encoding="utf-8")
+        for target in (
+            "charter.md",
+            "system.md",
+            "ledger.md",
+            "inventory/invoice-calculator.md",
+            "flows/invoice-event.md",
+        ):
+            self.assertIn(target, index_text)
+
+        log_text = (root / "log.md").read_text(encoding="utf-8")
+        self.assertRegex(log_text, r"(?m)^## \d{4}-\d{2}-\d{2}$")
+
+        charter_text = (root / "charter.md").read_text(encoding="utf-8")
+        self.assertIn("# Questions asked", charter_text)
+
+        ledger_text = (root / "ledger.md").read_text(encoding="utf-8")
+        for heading in ("# Repositories", "# Shards", "# Coverage", "# Exclusions",
+                        "# Budget", "# Inventory-only"):
+            self.assertIn(heading, ledger_text)
+
+        system_text = (root / "system.md").read_text(encoding="utf-8")
+        self.assertIn("inventory/invoice-calculator.md", system_text)
+
+        concept_paths: list[str] = []
+        for path in sorted(root.rglob("*.md")):
+            with self.subTest(path=str(path.relative_to(root))):
+                validator.check_links(path)
+                if path.name in ("index.md", "log.md"):
+                    continue
+                relative = path.relative_to(root).as_posix()
+                concept_paths.append(relative)
+                frontmatter = validator.read_frontmatter(path)
+                self.assertIsNotNone(frontmatter)
+                fields = validator.parse_frontmatter(frontmatter or "")
+                self.assertTrue(fields.get("type"))
+                self.assertTrue(fields.get("title"))
+                self.assertTrue(fields.get("description"))
+                self.assertIn(
+                    fields.get("evidence"),
+                    {"confirmed", "corroborated", "inferred", "unknown"},
+                )
+                self.assertIn(
+                    fields.get("status"), {"draft", "stable", "deprecated"}
+                )
+                text = path.read_text(encoding="utf-8")
+                self.assertRegex(
+                    text,
+                    r"(?m)^generated:\s*\{\s*by:\s*[a-z0-9-]+/\d+\.\d+\.\d+,\s*"
+                    r"at:\s*[^}]+\}\s*$",
+                )
+                if "repo://" in text:
+                    has_top_level = bool(fields.get("repo")) and bool(fields.get("commit"))
+                    has_source_level = bool(
+                        re.search(r"(?m)^\s+repo:\s*\S+", text)
+                    ) and bool(re.search(r"(?m)^\s+commit:\s*\S+", text))
+                    self.assertTrue(
+                        has_top_level or has_source_level,
+                        "repo:// evidence needs repo/commit at the concept or source level",
+                    )
+                    self.assertIn("sources:", text)
+                if path.name in ("charter.md", "ledger.md", "system.md"):
+                    # Process and aggregate documents link to sourced concepts instead.
+                    self.assertNotRegex(validator.strip_code(text), r"(?m)^sources:")
+
+        for relative in concept_paths:
+            with self.subTest(reachable=relative):
+                self.assertTrue(
+                    self._is_reachable(relative, root, index_text, system_text)
+                )
+
+        self.assertEqual(validator.errors, [])
+
+    def _is_reachable(
+        self, relative: str, root: Path, index_text: str, system_text: str
+    ) -> bool:
+        """A concept is reachable from the root index, system map, or a parent index."""
+        if relative in index_text or relative in system_text:
+            return True
+        concept = root / relative
+        for parent in concept.parents:
+            if parent == root:
+                break
+            parent_index = parent / "index.md"
+            if not parent_index.is_file():
+                continue
+            parent_text = parent_index.read_text(encoding="utf-8")
+            if relative in parent_text or concept.name in parent_text:
+                return True
+        return False
 
 
 if __name__ == "__main__":

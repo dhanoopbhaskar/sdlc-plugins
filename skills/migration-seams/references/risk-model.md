@@ -201,8 +201,8 @@ confirmed.
 | Partial | Builds with manual steps | Runs with shared environment | Some tests, gaps known | Logs only | Partial or stale docs | Read sharing | Informal owner |
 | Weak | Broken or undocumented | Cannot run | None or disabled | None | Names only | Multiple writers | None |
 
-A deployable with a `weak` Build or Run dimension is a migration prerequisite, not a candidate;
-two or more other `weak` dimensions should be treated the same way.
+A deployable with a `weak` Build or Run dimension is a migration prerequisite, not a candidate.
+Treat it the same way when two or more other readiness dimensions are `weak`.
 
 ## Migration option comparison
 
