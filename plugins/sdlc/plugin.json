@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sdlc",
+  "version": "0.3.0",
+  "description": "Core SDLC skills: planning, root-cause investigation, completion verification, merge-gate review, and behavioral guardrails.",
+  "author": {
+    "name": "Dhanoop Bhaskar",
+    "email": "dhaskarbhaskar@gmail.com",
+    "url": "https://dhanoopbhaskar.com"
+  },
+  "homepage": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+  "repository": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "skills",
+    "planning",
+    "debugging",
+    "root-cause",
+    "code-review",
+    "merge-gate",
+    "verification",
+    "guardrails"
+  ]
+}

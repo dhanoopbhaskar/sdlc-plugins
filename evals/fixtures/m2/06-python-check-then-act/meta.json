@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.fixture/v1",
+  "id": "m2/06-python-check-then-act",
+  "kind": "defect",
+  "stack": "python",
+  "tier": "T2",
+  "title": "Check-then-act race on a shared balance (Python)",
+  "expected": {
+    "verdict": "FIX",
+    "findings_min": 1,
+    "lenses": [
+      "L1"
+    ],
+    "severities": [
+      "P1"
+    ],
+    "absence": false
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "discovery",
+  "version": "0.3.0",
+  "description": "Evidence-graded discovery of unfamiliar and legacy systems: reconnaissance, project profiles, mapping, migration seams, and OKF documentation.",
+  "author": {
+    "name": "Dhanoop Bhaskar",
+    "email": "dhaskarbhaskar@gmail.com",
+    "url": "https://dhanoopbhaskar.com"
+  },
+  "homepage": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+  "repository": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "skills",
+    "migration",
+    "legacy-code",
+    "code-discovery",
+    "discovery",
+    "reconnaissance",
+    "cartography",
+    "profile",
+    "risk"
+  ]
+}

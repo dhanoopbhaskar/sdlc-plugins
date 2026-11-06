@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.fixture/v1",
+  "id": "m2/01-python-absent-authz",
+  "kind": "defect",
+  "stack": "python",
+  "tier": "T2",
+  "title": "Removed authorization guard (Python)",
+  "expected": {
+    "verdict": "BLOCK",
+    "findings_min": 1,
+    "lenses": [
+      "L2"
+    ],
+    "severities": [
+      "P0"
+    ],
+    "absence": true
+  }
+}

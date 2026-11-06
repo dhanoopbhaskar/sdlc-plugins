@@ -1,0 +1,9 @@
+--- a/cache.ts
++++ b/cache.ts
+@@ -1,5 +1,5 @@
+ import type { Cache } from "./cache";
+ 
+ export function profileKey(tenantId: string, userId: string): string {
+-  return `tenant:${tenantId}:profile:${userId}`;
++  return `profile:${userId}`;
+ }

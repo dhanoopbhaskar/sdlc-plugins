@@ -17,7 +17,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate skill metadata, links, and versions
+      - name: Validate packaging, links, versions, and samples
         run: python3 scripts/validate_skills.py
+      - name: Run Gate A (format and arithmetic)
+        run: python3 evals/run.py --gate=a
+      - name: Run Gate D (root-cause fixtures)
+        run: python3 evals/run.py --gate=d
+      - name: Check install and per-run context budgets
+        run: python3 evals/measure.py
       - name: Test the validator
         run: python3 -m unittest discover -s tests -v
+      - name: Test the verdict parser and eval gates
+        run: python3 -m unittest discover -s evals -v

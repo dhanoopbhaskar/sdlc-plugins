@@ -3,20 +3,26 @@
 
 Dependency-free checks:
 
-* Every ``skills/<name>/SKILL.md`` has parseable frontmatter with the required
-  ``name`` and ``description`` fields, follows the Agent Skills naming rules,
-  and warns when the body exceeds the recommended length. Frontmatter is
-  parsed as a simple YAML mapping without external dependencies; unsupported
-  constructs fail loudly instead of being silently truncated.
-* Relative Markdown links and images in skills and the README resolve, including
-  angle-bracket destinations, reference definitions, and heading anchors. Bundle-absolute OKF
-  links (``/path``) resolve when a bundle root (an ``index.md`` with ``okf_version``)
-  is found, and are ignored otherwise. Links inside fenced and indented code
-  blocks, HTML comments, URLs, template placeholders, and footnote definitions
-  are ignored.
-* ``plugin.json``, ``.github/plugin/marketplace.json``, and ``CHANGELOG.md``
-  agree on the current version; required manifest fields are present; and
-  concrete ``generated``/``author`` actor versions in skills match that version.
+* Every plugin root under ``plugins/<plugin>`` has a ``plugin.json`` and a
+  ``skills/`` directory. Every ``skills/<name>/SKILL.md`` has parseable
+  frontmatter with the required ``name`` and ``description`` fields, follows
+  the Agent Skills naming rules, and warns when the body exceeds the
+  recommended length. Frontmatter is parsed as a simple YAML mapping without
+  external dependencies; unsupported constructs fail loudly instead of being
+  silently truncated.
+* Relative Markdown links and images in plugin skills and the README resolve,
+  including angle-bracket destinations, reference definitions, and heading
+  anchors. Bundle-absolute OKF links (``/path``) resolve when a bundle root (an
+  ``index.md`` with ``okf_version``) is found, and are ignored otherwise. Links
+  inside fenced and indented code blocks, HTML comments, URLs, template
+  placeholders, and footnote definitions are ignored.
+* Plugin manifests and ``.github/plugin/marketplace.json`` agree: every plugin
+  is listed once, the marketplace source resolves to its plugin root, and the
+  versions are lockstep. ``CHANGELOG.md`` has a section for that version, and
+  concrete ``generated``/``author`` actor versions in skills match it.
+* ``.sdlc/profile.json`` samples satisfy the profile contract, and
+  ``evals/fixtures/**/verdict.md`` samples parse and recompute through
+  ``evals/verdict.py``.
 
 Run from the repository root:
 
@@ -27,6 +33,7 @@ Exits non-zero on error. Warnings do not fail the build.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import sys
@@ -35,7 +42,6 @@ from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILLS_DIR = ROOT / "skills"
 
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LINK_RE = re.compile(
@@ -649,23 +655,80 @@ def check_skill(skill_md: Path) -> str:
     return name or ""
 
 
-def check_versions() -> None:
-    plugin = _read_json_object(ROOT / "plugin.json", "plugin.json")
-    if plugin is None:
-        return
-    market = _read_json_object(
-        ROOT / ".github" / "plugin" / "marketplace.json",
-        ".github/plugin/marketplace.json",
+def plugins_root() -> Path:
+    return ROOT / "plugins"
+
+
+def marketplace_path() -> Path:
+    return ROOT / ".github" / "plugin" / "marketplace.json"
+
+
+def plugin_dirs() -> list[Path]:
+    """Return the plugin roots under ``plugins/``."""
+    root = plugins_root()
+    if not root.is_dir():
+        return []
+    return sorted(
+        path for path in root.iterdir() if path.is_dir() and not path.name.startswith(".")
     )
-    if market is None:
+
+
+def plugin_manifests() -> list[tuple[Path, dict]]:
+    manifests: list[tuple[Path, dict]] = []
+    for plugin_dir in plugin_dirs():
+        label = f"{display_path(plugin_dir)}/plugin.json"
+        manifest = _read_json_object(plugin_dir / "plugin.json", label)
+        if manifest is not None:
+            manifests.append((plugin_dir, manifest))
+    return manifests
+
+
+def lockstep_version() -> str | None:
+    """Return the shared plugin version, or None when it is missing or split."""
+    version: str | None = None
+    for _, manifest in plugin_manifests():
+        candidate = manifest.get("version")
+        if not isinstance(candidate, str) or not is_semver(candidate):
+            continue
+        if version is None:
+            version = candidate
+        elif candidate != version:
+            return None
+    return version
+
+
+def check_versions() -> None:
+    manifests = plugin_manifests()
+    if not manifests:
+        fail("plugins/: no plugin manifests found")
         return
 
-    version = plugin.get("version")
-    if not isinstance(version, str) or not version.strip():
-        fail("plugin.json: missing or invalid 'version'")
+    versions: dict[str, str] = {}
+    for plugin_dir, manifest in manifests:
+        label = f"{display_path(plugin_dir)}/plugin.json"
+        name = manifest.get("name")
+        if not isinstance(name, str) or not name.strip():
+            fail(f"{label}: 'name' must be a non-empty string")
+        elif name != plugin_dir.name:
+            fail(f"{label}: name {name!r} does not match directory {plugin_dir.name!r}")
+        version = manifest.get("version")
+        if not isinstance(version, str) or not version.strip():
+            fail(f"{label}: missing or invalid 'version'")
+        elif not is_semver(version):
+            fail(f"{label}: 'version' must be semantic versioning, got {version!r}")
+        else:
+            versions[plugin_dir.name] = version
+
+    if not versions:
         return
-    if not is_semver(version):
-        fail(f"plugin.json: 'version' must be semantic versioning, got {version!r}")
+
+    version = next(iter(versions.values()))
+    for name, candidate in versions.items():
+        if candidate != version:
+            fail(f"version lockstep: {name} is {candidate!r}, expected {version!r}")
+
+    market = _read_json_object(marketplace_path(), ".github/plugin/marketplace.json")
+    if market is None:
         return
 
     metadata = market.get("metadata")
@@ -675,7 +738,7 @@ def check_versions() -> None:
         market_version = metadata.get("version")
         if market_version != version:
             fail(
-                "version mismatch: plugin.json "
+                "version mismatch: plugins "
                 f"{version!r} vs marketplace metadata {market_version!r}"
             )
 
@@ -683,18 +746,43 @@ def check_versions() -> None:
     if not isinstance(plugins, list):
         fail(".github/plugin/marketplace.json: 'plugins' must be an array")
         return
+
+    listed: dict[str, dict] = {}
     for index, entry in enumerate(plugins):
+        label = f".github/plugin/marketplace.json: plugins[{index}]"
         if not isinstance(entry, dict):
-            fail(
-                f".github/plugin/marketplace.json: plugins[{index}] must be an object"
-            )
+            fail(f"{label} must be an object")
             continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            fail(f"{label}: 'name' must be a non-empty string")
+            continue
+        if name in listed:
+            fail(f"{label}: duplicate marketplace entry {name!r}")
+            continue
+        listed[name] = entry
         if entry.get("version") != version:
             fail(
-                "version mismatch: plugin.json "
-                f"{version!r} vs marketplace plugin {entry.get('name')!r} "
+                "version mismatch: plugins "
+                f"{version!r} vs marketplace plugin {name!r} "
                 f"{entry.get('version')!r}"
             )
+        if name not in versions:
+            fail(f"{label}: no plugin manifest named {name!r}")
+            continue
+        source = entry.get("source")
+        if isinstance(source, str) and "://" not in source:
+            resolved = (ROOT / source).resolve()
+            expected = (plugins_root() / name).resolve()
+            if resolved != expected:
+                fail(
+                    f"{label}: source {source!r} does not resolve to "
+                    f"{display_path(expected)}"
+                )
+
+    for name in versions:
+        if name not in listed:
+            fail(f".github/plugin/marketplace.json: plugin {name!r} is not listed")
 
     try:
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -719,27 +807,36 @@ def _read_json_object(path: Path, label: str) -> dict | None:
 
 def check_manifest_shapes() -> None:
     """Check the fields the Agent Plugins manifests require."""
-    plugin = _read_json_object(ROOT / "plugin.json", "plugin.json")
-    if plugin is not None:
+    manifests = plugin_manifests()
+    if not manifests:
+        fail("plugins/: no plugin manifests found")
+
+    for plugin_dir, plugin in manifests:
+        label = f"{display_path(plugin_dir)}/plugin.json"
         if plugin.get("$schema") != PLUGIN_SCHEMA:
-            fail(f"plugin.json: '$schema' must be {PLUGIN_SCHEMA}")
+            fail(f"{label}: '$schema' must be {PLUGIN_SCHEMA}")
         name = plugin.get("name")
         if not isinstance(name, str) or not name.strip():
-            fail("plugin.json: 'name' must be a non-empty string")
+            fail(f"{label}: 'name' must be a non-empty string")
 
-    mcp_path = ROOT / "mcp.json"
-    if mcp_path.exists():
-        mcp = _read_json_object(mcp_path, "mcp.json")
-        if mcp is not None:
-            if mcp.get("$schema") != MCP_SCHEMA:
-                fail(f"mcp.json: '$schema' must be {MCP_SCHEMA}")
-            if not isinstance(mcp.get("mcpServers"), dict):
-                fail("mcp.json: 'mcpServers' must be an object")
+        mcp_path = plugin_dir / "mcp.json"
+        if mcp_path.exists():
+            mcp = _read_json_object(
+                mcp_path, f"{display_path(plugin_dir)}/mcp.json"
+            )
+            if mcp is not None:
+                if mcp.get("$schema") != MCP_SCHEMA:
+                    fail(
+                        f"{display_path(plugin_dir)}/mcp.json: "
+                        f"'$schema' must be {MCP_SCHEMA}"
+                    )
+                if not isinstance(mcp.get("mcpServers"), dict):
+                    fail(
+                        f"{display_path(plugin_dir)}/mcp.json: "
+                        "'mcpServers' must be an object"
+                    )
 
-    market = _read_json_object(
-        ROOT / ".github" / "plugin" / "marketplace.json",
-        ".github/plugin/marketplace.json",
-    )
+    market = _read_json_object(marketplace_path(), ".github/plugin/marketplace.json")
     if market is None:
         return
     if not isinstance(market.get("name"), str) or not market["name"].strip():
@@ -755,13 +852,20 @@ def check_manifest_shapes() -> None:
     if not isinstance(plugins, list) or not plugins:
         fail(".github/plugin/marketplace.json: 'plugins' must be a non-empty array")
         return
+
+    seen: set[str] = set()
     for index, entry in enumerate(plugins):
         label = f".github/plugin/marketplace.json: plugins[{index}]"
         if not isinstance(entry, dict):
             fail(f"{label} must be an object")
             continue
-        if not isinstance(entry.get("name"), str) or not entry["name"].strip():
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
             fail(f"{label}: 'name' must be a non-empty string")
+        elif name in seen:
+            fail(f"{label}: duplicate plugin name {name!r}")
+        else:
+            seen.add(name)
         source = entry.get("source")
         if isinstance(source, str):
             if not source.strip():
@@ -770,6 +874,10 @@ def check_manifest_shapes() -> None:
                 resolved = (ROOT / source).resolve()
                 if not resolved.is_dir():
                     fail(f"{label}: source directory {source!r} does not exist")
+                elif not (resolved / "plugin.json").is_file():
+                    fail(
+                        f"{label}: source directory {source!r} has no plugin.json"
+                    )
         elif not isinstance(source, dict):
             fail(f"{label}: 'source' must be a string or object")
 
@@ -782,56 +890,213 @@ def check_actor_versions(version: str | None = None) -> None:
     plugin release.
     """
     if version is None:
-        plugin = _read_json_object(ROOT / "plugin.json", "plugin.json")
-        if plugin is None:
-            return
-        version = plugin.get("version")
-    if not isinstance(version, str) or not version.strip() or not SKILLS_DIR.is_dir():
+        version = lockstep_version()
+    if not isinstance(version, str) or not version.strip():
         return
 
-    skill_names = {path.name for path in SKILLS_DIR.iterdir() if path.is_dir()}
-    for path in sorted(SKILLS_DIR.rglob("*.md")):
-        body = path.read_text(encoding="utf-8-sig")
-        for match in ACTOR_VERSION_RE.finditer(body):
-            actor, actor_version = match.group(1), match.group(2)
-            if actor in skill_names and actor_version != version:
-                fail(
-                    f"{display_path(path)}: actor {actor}/{actor_version} "
-                    f"does not match plugin version {version}"
+    roots = plugin_dirs()
+    skill_names: set[str] = set()
+    for plugin_dir in roots:
+        skills_dir = plugin_dir / "skills"
+        if skills_dir.is_dir():
+            skill_names.update(
+                path.name for path in skills_dir.iterdir() if path.is_dir()
+            )
+
+    for plugin_dir in roots:
+        for path in sorted(plugin_dir.rglob("*.md")):
+            body = path.read_text(encoding="utf-8-sig")
+            for match in ACTOR_VERSION_RE.finditer(body):
+                actor, actor_version = match.group(1), match.group(2)
+                if actor in skill_names and actor_version != version:
+                    fail(
+                        f"{display_path(path)}: actor {actor}/{actor_version} "
+                        f"does not match plugin version {version}"
+                    )
+
+
+PROFILE_SCHEMA = "sdlc.profile/v1"
+PROFILE_COMMAND_KEYS = ("install", "test", "lint", "typecheck", "build")
+
+
+def _check_profile_command(value, label: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        fail(f"{label}: must be an object or null")
+        return
+    for key in ("cmd", "source"):
+        item = value.get(key)
+        if not isinstance(item, str) or not item.strip():
+            fail(f"{label}: {key!r} must be a non-empty string")
+    for key in value:
+        if key not in ("cmd", "source"):
+            warn(f"{label}: unknown command field {key!r}")
+
+
+def _check_profile_commands(value, label: str) -> None:
+    if not isinstance(value, dict):
+        fail(f"{label}: must be an object")
+        return
+    for key in value:
+        if key not in PROFILE_COMMAND_KEYS:
+            fail(f"{label}: unknown command {key!r}")
+    for key, command in value.items():
+        if key in PROFILE_COMMAND_KEYS:
+            _check_profile_command(command, f"{label}.{key}")
+
+
+def check_profile_contract(data: dict, label: str) -> None:
+    """Validate a ``.sdlc/profile.json`` document against the M1 contract."""
+    if data.get("schema") != PROFILE_SCHEMA:
+        fail(f"{label}: 'schema' must be {PROFILE_SCHEMA!r}")
+    for key in ("generated_by", "base"):
+        value = data.get(key)
+        if not isinstance(value, str) or not value.strip():
+            fail(f"{label}: {key!r} must be a non-empty string")
+
+    stack = data.get("stack")
+    if not isinstance(stack, list) or any(
+        not isinstance(item, str) or not item.strip() for item in stack
+    ):
+        fail(f"{label}: 'stack' must be an array of non-empty strings")
+
+    _check_profile_commands(data.get("commands"), f"{label}.commands")
+
+    workspaces = data.get("workspaces", {})
+    if not isinstance(workspaces, dict):
+        fail(f"{label}: 'workspaces' must be an object")
+    else:
+        for name, workspace in workspaces.items():
+            parts = name.split("/")
+            if (
+                not name
+                or name.startswith("/")
+                or "\\" in name
+                or any(part in ("", ".", "..") for part in parts)
+            ):
+                fail(f"{label}: workspace {name!r} must be a relative POSIX path")
+            if not isinstance(workspace, dict):
+                fail(f"{label}.workspaces[{name!r}]: must be an object")
+                continue
+            if "commands" not in workspace:
+                fail(f"{label}.workspaces[{name!r}]: missing 'commands'")
+            else:
+                _check_profile_commands(
+                    workspace["commands"], f"{label}.workspaces[{name!r}].commands"
                 )
+            for key in workspace:
+                if key != "commands":
+                    warn(f"{label}.workspaces[{name!r}]: unknown field {key!r}")
+
+    ci = data.get("ci")
+    if ci is not None:
+        if not isinstance(ci, dict):
+            fail(f"{label}: 'ci' must be an object or null")
+        else:
+            if not isinstance(ci.get("file"), str) or not ci["file"].strip():
+                fail(f"{label}.ci: 'file' must be a non-empty string")
+            jobs = ci.get("jobs", [])
+            if not isinstance(jobs, list) or any(
+                not isinstance(job, str) or not job.strip() for job in jobs
+            ):
+                fail(f"{label}.ci: 'jobs' must be an array of non-empty strings")
+
+    for key in ("risk_paths", "exclusions"):
+        value = data.get(key, [])
+        if not isinstance(value, list) or any(
+            not isinstance(item, str) or not item.strip() for item in value
+        ):
+            fail(f"{label}: {key!r} must be an array of non-empty strings")
+
+    if "notes" in data and not isinstance(data["notes"], str):
+        fail(f"{label}: 'notes' must be a string")
+
+
+def check_profile_samples() -> None:
+    sample_dir = ROOT / "tests" / "fixtures" / "profile"
+    if not sample_dir.is_dir():
+        return
+    for path in sorted(sample_dir.glob("*.json")):
+        label = str(display_path(path))
+        data = _read_json_object(path, label)
+        if data is not None:
+            check_profile_contract(data, label)
+
+
+def _load_verdict_module():
+    path = ROOT / "evals" / "verdict.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("sdlc_verdict", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_verdict_samples() -> None:
+    """Recompute committed verdict fixtures so Gate A covers the artifact format."""
+    fixtures = ROOT / "evals" / "fixtures"
+    if not fixtures.is_dir():
+        return
+    module = _load_verdict_module()
+    if module is None:
+        return
+    for path in sorted(fixtures.rglob("verdict.md")):
+        label = str(display_path(path))
+        try:
+            text = path.read_text(encoding="utf-8")
+            module.check(module.extract_json(text))
+        except (OSError, module.VerdictError) as exc:
+            fail(f"{label}: {exc}")
 
 
 def main() -> int:
-    if not SKILLS_DIR.is_dir():
-        fail("skills/ directory is missing")
+    roots = plugin_dirs()
+    if not roots:
+        fail("plugins/ directory is missing or empty")
         return report()
 
-    skill_dirs = sorted(path for path in SKILLS_DIR.iterdir() if path.is_dir())
-    if not skill_dirs:
-        fail("skills/ contains no skill directories")
-
     names: dict[str, Path] = {}
-    for skill_dir in skill_dirs:
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_md.is_file():
-            fail(f"{skill_dir.relative_to(ROOT)}: missing SKILL.md")
-            continue
-        name = check_skill(skill_md)
-        if name:
-            if name in names:
-                fail(f"duplicate skill name {name!r} in {names[name]} and {skill_md}")
-            names[name] = skill_md
-
     checked_docs = 0
-    for path in sorted(SKILLS_DIR.rglob("*.md")):
-        check_links(path)
-        checked_docs += 1
+    for plugin_dir in roots:
+        plugin_label = display_path(plugin_dir)
+        if not (plugin_dir / "plugin.json").is_file():
+            fail(f"{plugin_label}: missing plugin.json")
+        skills_dir = plugin_dir / "skills"
+        if not skills_dir.is_dir():
+            fail(f"{plugin_label}: missing skills/ directory")
+            continue
+        skill_dirs = sorted(path for path in skills_dir.iterdir() if path.is_dir())
+        if not skill_dirs:
+            fail(f"{plugin_label}/skills: contains no skill directories")
+        for skill_dir in skill_dirs:
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.is_file():
+                fail(f"{display_path(skill_dir)}: missing SKILL.md")
+                continue
+            name = check_skill(skill_md)
+            if name:
+                if name in names:
+                    fail(
+                        f"duplicate skill name {name!r} in "
+                        f"{display_path(names[name])} and {display_path(skill_md)}"
+                    )
+                names[name] = skill_md
+        for path in sorted(skills_dir.rglob("*.md")):
+            check_links(path)
+            checked_docs += 1
+
     check_links(ROOT / "README.md")
     checked_docs += 1
 
     check_versions()
     check_manifest_shapes()
     check_actor_versions()
+    check_profile_samples()
+    check_verdict_samples()
 
     print(f"Checked {len(names)} skills and {checked_docs} Markdown files.")
     return report()

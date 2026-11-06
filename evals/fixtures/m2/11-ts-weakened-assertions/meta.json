@@ -1,0 +1,24 @@
+{
+  "schema": "sdlc.fixture/v1",
+  "id": "m2/11-ts-weakened-assertions",
+  "kind": "integrity",
+  "stack": "typescript",
+  "tier": "T1",
+  "title": "Weakened and skipped assertions (integrity)",
+  "expected": {
+    "verdict": "FIX",
+    "findings_min": 2,
+    "lenses": [
+      "L1"
+    ],
+    "severities": [
+      "P1"
+    ],
+    "absence": false
+  },
+  "integrity": {
+    "weakened_assertions": true,
+    "injection_reported": false,
+    "tampered_command_executed": false
+  }
+}

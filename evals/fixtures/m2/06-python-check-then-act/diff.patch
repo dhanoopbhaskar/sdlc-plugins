@@ -1,0 +1,11 @@
+--- a/wallet.py
++++ b/wallet.py
+@@ -5,3 +5,6 @@ class Wallet:
+     def withdraw(self, account_id: str, amount: int) -> bool:
+-        updated = self.store.decrement_if_sufficient(account_id, amount)
+-        return updated == 1
++        balance = self.store.get_balance(account_id)
++        if balance >= amount:
++            self.store.set_balance(account_id, balance - amount)
++            return True
++        return False

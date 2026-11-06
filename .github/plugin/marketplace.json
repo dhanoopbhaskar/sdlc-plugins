@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Software Development Lifecycle Plugins marketplace",
-    "version": "0.2.1"
+    "version": "0.3.0"
   },
   "plugins": [
     {
-      "name": "sdlc-plugins",
-      "description": "Software Development Lifecycle Plugins",
-      "version": "0.2.1",
-      "source": ".",
+      "name": "sdlc",
+      "description": "Core SDLC skills: planning, root-cause investigation, completion verification, merge-gate review, and behavioral guardrails.",
+      "version": "0.3.0",
+      "source": "./plugins/sdlc",
       "author": {
         "name": "Dhanoop Bhaskar",
         "email": "dhaskarbhaskar@gmail.com",
@@ -24,7 +24,31 @@
       "license": "MIT",
       "keywords": [
         "sdlc",
-        "plugins",
+        "skills",
+        "planning",
+        "debugging",
+        "root-cause",
+        "code-review",
+        "merge-gate",
+        "verification",
+        "guardrails"
+      ]
+    },
+    {
+      "name": "discovery",
+      "description": "Evidence-graded discovery of unfamiliar and legacy systems: reconnaissance, project profiles, mapping, migration seams, and OKF documentation.",
+      "version": "0.3.0",
+      "source": "./plugins/discovery",
+      "author": {
+        "name": "Dhanoop Bhaskar",
+        "email": "dhaskarbhaskar@gmail.com",
+        "url": "https://dhanoopbhaskar.com"
+      },
+      "homepage": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+      "repository": "https://github.com/dhanoopbhaskar/sdlc-plugins",
+      "license": "MIT",
+      "keywords": [
+        "sdlc",
         "skills",
         "migration",
         "legacy-code",
@@ -32,6 +56,7 @@
         "discovery",
         "reconnaissance",
         "cartography",
+        "profile",
         "risk"
       ]
     }

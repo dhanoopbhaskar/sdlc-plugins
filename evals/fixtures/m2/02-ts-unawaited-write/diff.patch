@@ -1,0 +1,11 @@
+--- a/orders.ts
++++ b/orders.ts
+@@ -1,6 +1,6 @@
+ import type { Db } from "./db";
+ 
+ export async function createOrder(db: Db, input: { sku: string; qty: number }) {
+-  const order = await db.orders.create(input);
+-  return { id: order.id };
++  db.orders.create(input);
++  return { ok: true };
+ }

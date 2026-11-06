@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import re
 import sys
@@ -211,8 +213,15 @@ class SkillCheckTests(unittest.TestCase):
 
 
 class RepositorySkillsTests(unittest.TestCase):
+    def _skill_files(self) -> list[Path]:
+        return sorted(
+            path
+            for plugin_dir in validator.plugin_dirs()
+            for path in plugin_dir.glob("skills/*/SKILL.md")
+        )
+
     def test_every_skill_parses(self) -> None:
-        skill_files = sorted((validator.SKILLS_DIR).glob("*/SKILL.md"))
+        skill_files = self._skill_files()
         self.assertTrue(skill_files)
 
         for path in skill_files:
@@ -227,9 +236,17 @@ class RepositorySkillsTests(unittest.TestCase):
     def test_every_skill_passes_validation(self) -> None:
         validator.errors.clear()
         validator.warnings.clear()
-        for path in sorted(validator.SKILLS_DIR.glob("*/SKILL.md")):
+        for path in self._skill_files():
             validator.check_skill(path)
         self.assertEqual(validator.errors, [])
+
+    def test_plugin_roots_are_discovered(self) -> None:
+        names = [path.name for path in validator.plugin_dirs()]
+        self.assertIn("sdlc", names)
+        self.assertIn("discovery", names)
+        for plugin_dir in validator.plugin_dirs():
+            self.assertTrue((plugin_dir / "plugin.json").is_file())
+            self.assertTrue((plugin_dir / "skills").is_dir())
 
 
 class RepositoryChecksTests(unittest.TestCase):
@@ -536,6 +553,37 @@ class RepositoryChecksTests(unittest.TestCase):
             nested.mkdir()
             self.assertIsNone(validator.find_bundle_root(nested))
 
+    def _write_plugin(
+        self, root: Path, name: str, version: str = "1.0.0"
+    ) -> Path:
+        plugin_dir = root / "plugins" / name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(
+                {"$schema": validator.PLUGIN_SCHEMA, "name": name, "version": version}
+            ),
+            encoding="utf-8",
+        )
+        return plugin_dir
+
+    def _write_market(
+        self, root: Path, version: str, entries: list[dict] | None = None
+    ) -> None:
+        market = root / ".github" / "plugin"
+        market.mkdir(parents=True, exist_ok=True)
+        if entries is None:
+            entries = [
+                {
+                    "name": "sdlc",
+                    "version": version,
+                    "source": "./plugins/sdlc",
+                }
+            ]
+        (market / "marketplace.json").write_text(
+            json.dumps({"metadata": {"version": version}, "plugins": entries}),
+            encoding="utf-8",
+        )
+
     def _write_versions(
         self,
         root: Path,
@@ -543,20 +591,19 @@ class RepositoryChecksTests(unittest.TestCase):
         metadata_version: str,
         entry_version: str,
         changelog: str,
+        plugin_name: str = "sdlc",
     ) -> None:
-        (root / "plugin.json").write_text(
-            json.dumps({"version": plugin_version}), encoding="utf-8"
-        )
-        market = root / ".github" / "plugin"
-        market.mkdir(parents=True)
-        (market / "marketplace.json").write_text(
-            json.dumps(
+        self._write_plugin(root, plugin_name, plugin_version)
+        self._write_market(
+            root,
+            metadata_version,
+            [
                 {
-                    "metadata": {"version": metadata_version},
-                    "plugins": [{"name": "sdlc-plugins", "version": entry_version}],
+                    "name": plugin_name,
+                    "version": entry_version,
+                    "source": f"./plugins/{plugin_name}",
                 }
-            ),
-            encoding="utf-8",
+            ],
         )
         (root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
 
@@ -567,6 +614,117 @@ class RepositoryChecksTests(unittest.TestCase):
             with mock.patch.object(validator, "ROOT", root):
                 validator.check_versions()
         self.assertEqual(validator.errors, [])
+
+    def test_check_versions_accepts_lockstep_plugins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_plugin(root, "sdlc", "9.9.9")
+            self._write_plugin(root, "discovery", "9.9.9")
+            self._write_market(
+                root,
+                "9.9.9",
+                [
+                    {
+                        "name": "sdlc",
+                        "version": "9.9.9",
+                        "source": "./plugins/sdlc",
+                    },
+                    {
+                        "name": "discovery",
+                        "version": "9.9.9",
+                        "source": "./plugins/discovery",
+                    },
+                ],
+            )
+            (root / "CHANGELOG.md").write_text("## [9.9.9]\n", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertEqual(validator.errors, [])
+
+    def test_check_versions_reports_lockstep_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_plugin(root, "sdlc", "1.0.0")
+            self._write_plugin(root, "discovery", "1.1.0")
+            self._write_market(
+                root,
+                "1.0.0",
+                [
+                    {
+                        "name": "sdlc",
+                        "version": "1.0.0",
+                        "source": "./plugins/sdlc",
+                    },
+                    {
+                        "name": "discovery",
+                        "version": "1.0.0",
+                        "source": "./plugins/discovery",
+                    },
+                ],
+            )
+            (root / "CHANGELOG.md").write_text("## [1.0.0]\n", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("version lockstep" in error for error in validator.errors)
+        )
+
+    def test_check_versions_reports_unlisted_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_plugin(root, "sdlc", "1.0.0")
+            self._write_plugin(root, "discovery", "1.0.0")
+            self._write_market(root, "1.0.0")
+            (root / "CHANGELOG.md").write_text("## [1.0.0]\n", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("is not listed" in error for error in validator.errors)
+        )
+
+    def test_check_versions_reports_source_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_plugin(root, "sdlc", "1.0.0")
+            self._write_market(
+                root,
+                "1.0.0",
+                [
+                    {
+                        "name": "sdlc",
+                        "version": "1.0.0",
+                        "source": "./plugins/elsewhere",
+                    }
+                ],
+            )
+            (root / "CHANGELOG.md").write_text("## [1.0.0]\n", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("does not resolve to" in error for error in validator.errors)
+        )
+
+    def test_check_versions_reports_unknown_marketplace_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_plugin(root, "sdlc", "1.0.0")
+            self._write_market(
+                root,
+                "1.0.0",
+                [
+                    {
+                        "name": "ghost",
+                        "version": "1.0.0",
+                        "source": "./plugins/ghost",
+                    }
+                ],
+            )
+            (root / "CHANGELOG.md").write_text("## [1.0.0]\n", encoding="utf-8")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_versions()
+        self.assertTrue(
+            any("no plugin manifest named" in error for error in validator.errors)
+        )
 
     def test_check_versions_reports_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -613,7 +771,9 @@ class RepositoryChecksTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._write_versions(root, "1.0.0", "1.0.0", "1.0.0", "## [1.0.0]\n")
-            (root / "plugin.json").write_text("[]", encoding="utf-8")
+            (root / "plugins" / "sdlc" / "plugin.json").write_text(
+                "[]", encoding="utf-8"
+            )
             with mock.patch.object(validator, "ROOT", root):
                 validator.check_versions()
         self.assertTrue(
@@ -667,36 +827,37 @@ class RepositoryChecksTests(unittest.TestCase):
     def test_check_actor_versions_reports_non_object_plugin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "skills" / "demo-skill").mkdir(parents=True)
-            (root / "plugin.json").write_text("[]", encoding="utf-8")
-            with mock.patch.object(validator, "ROOT", root), mock.patch.object(
-                validator, "SKILLS_DIR", root / "skills"
-            ):
+            self._write_plugin(root, "sdlc", "1.0.0")
+            (root / "plugins" / "sdlc" / "plugin.json").write_text(
+                "[]", encoding="utf-8"
+            )
+            with mock.patch.object(validator, "ROOT", root):
                 validator.check_actor_versions()
         self.assertTrue(
             any("plugin.json" in error and "JSON object" in error for error in validator.errors)
         )
 
     def _write_actor(
-        self, root: Path, skill: str, version: str, plugin_version: str
+        self,
+        root: Path,
+        skill: str,
+        version: str,
+        plugin_version: str,
+        plugin: str = "sdlc",
     ) -> None:
-        skill_dir = root / "skills" / skill
-        skill_dir.mkdir(parents=True)
+        skill_dir = root / "plugins" / plugin / "skills" / skill
+        skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(
             f"generated: {{ by: {skill}/{version}, at: 2026-01-01T00:00:00Z }}\n",
             encoding="utf-8",
         )
-        (root / "plugin.json").write_text(
-            json.dumps({"version": plugin_version}), encoding="utf-8"
-        )
+        self._write_plugin(root, plugin, plugin_version)
 
     def test_check_actor_versions_accepts_matching_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._write_actor(root, "demo-skill", "1.0.0", "1.0.0")
-            with mock.patch.object(validator, "ROOT", root), mock.patch.object(
-                validator, "SKILLS_DIR", root / "skills"
-            ):
+            with mock.patch.object(validator, "ROOT", root):
                 validator.check_actor_versions()
         self.assertEqual(validator.errors, [])
 
@@ -704,9 +865,7 @@ class RepositoryChecksTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._write_actor(root, "demo-skill", "9.9.9", "1.0.0")
-            with mock.patch.object(validator, "ROOT", root), mock.patch.object(
-                validator, "SKILLS_DIR", root / "skills"
-            ):
+            with mock.patch.object(validator, "ROOT", root):
                 validator.check_actor_versions()
         self.assertTrue(
             any("does not match plugin version" in error for error in validator.errors)
@@ -716,32 +875,29 @@ class RepositoryChecksTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self._write_actor(root, "demo-skill", "1.0.0", "2.0.0")
-            skill_md = root / "skills" / "demo-skill" / "SKILL.md"
+            skill_md = (
+                root / "plugins" / "sdlc" / "skills" / "demo-skill" / "SKILL.md"
+            )
             skill_md.write_text(
                 "generated: { by: external-tool/9.9.9, at: 2026-01-01T00:00:00Z }\n",
                 encoding="utf-8",
             )
-            with mock.patch.object(validator, "ROOT", root), mock.patch.object(
-                validator, "SKILLS_DIR", root / "skills"
-            ):
-                validator.check_actor_versions()
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_actor_versions("2.0.0")
         self.assertEqual(validator.errors, [])
 
     def test_check_actor_versions_reads_multiline_generated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            skill_dir = root / "skills" / "demo-skill"
-            skill_dir.mkdir(parents=True)
-            (skill_dir / "SKILL.md").write_text(
+            self._write_actor(root, "demo-skill", "1.0.0", "1.0.0")
+            skill_md = (
+                root / "plugins" / "sdlc" / "skills" / "demo-skill" / "SKILL.md"
+            )
+            skill_md.write_text(
                 "generated:\n  by: demo-skill/9.9.9\n  at: 2026-01-01T00:00:00Z\n",
                 encoding="utf-8",
             )
-            (root / "plugin.json").write_text(
-                json.dumps({"version": "1.0.0"}), encoding="utf-8"
-            )
-            with mock.patch.object(validator, "ROOT", root), mock.patch.object(
-                validator, "SKILLS_DIR", root / "skills"
-            ):
+            with mock.patch.object(validator, "ROOT", root):
                 validator.check_actor_versions()
         self.assertTrue(
             any("does not match plugin version" in error for error in validator.errors)
@@ -750,23 +906,33 @@ class RepositoryChecksTests(unittest.TestCase):
     def _write_manifest_shapes(
         self,
         root: Path,
-        plugin_name: str = "sdlc-plugins",
-        source: str = ".",
+        plugin_name: str = "sdlc",
+        manifest_name: str | None = None,
+        source: str = "./plugins/sdlc",
         mcp_servers: object = None,
     ) -> None:
-        (root / "plugin.json").write_text(
-            json.dumps({"$schema": validator.PLUGIN_SCHEMA, "name": plugin_name}),
-            encoding="utf-8",
-        )
-        (root / "mcp.json").write_text(
+        dir_name = plugin_name or "demo"
+        plugin_dir = root / "plugins" / dir_name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
             json.dumps(
                 {
-                    "$schema": validator.MCP_SCHEMA,
-                    "mcpServers": {} if mcp_servers is None else mcp_servers,
+                    "$schema": validator.PLUGIN_SCHEMA,
+                    "name": plugin_name if manifest_name is None else manifest_name,
                 }
             ),
             encoding="utf-8",
         )
+        if mcp_servers is not None:
+            (plugin_dir / "mcp.json").write_text(
+                json.dumps(
+                    {
+                        "$schema": validator.MCP_SCHEMA,
+                        "mcpServers": mcp_servers,
+                    }
+                ),
+                encoding="utf-8",
+            )
         market = root / ".github" / "plugin"
         market.mkdir(parents=True, exist_ok=True)
         (market / "marketplace.json").write_text(
@@ -774,7 +940,7 @@ class RepositoryChecksTests(unittest.TestCase):
                 {
                     "name": "sdlc-plugins",
                     "owner": {"name": "Owner"},
-                    "plugins": [{"name": "sdlc-plugins", "source": source}],
+                    "plugins": [{"name": plugin_name, "source": source}],
                 }
             ),
             encoding="utf-8",
@@ -796,10 +962,19 @@ class RepositoryChecksTests(unittest.TestCase):
                 validator.check_manifest_shapes()
         self.assertTrue(any("does not exist" in error for error in validator.errors))
 
+    def test_check_manifest_shapes_reports_source_without_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plugins" / "empty").mkdir(parents=True)
+            self._write_manifest_shapes(root, source="./plugins/empty")
+            with mock.patch.object(validator, "ROOT", root):
+                validator.check_manifest_shapes()
+        self.assertTrue(any("has no plugin.json" in error for error in validator.errors))
+
     def test_check_manifest_shapes_reports_invalid_plugin_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write_manifest_shapes(root, plugin_name="")
+            self._write_manifest_shapes(root, plugin_name="", manifest_name="")
             with mock.patch.object(validator, "ROOT", root):
                 validator.check_manifest_shapes()
         self.assertTrue(
@@ -813,6 +988,183 @@ class RepositoryChecksTests(unittest.TestCase):
             with mock.patch.object(validator, "ROOT", root):
                 validator.check_manifest_shapes()
         self.assertTrue(any("mcpServers" in error for error in validator.errors))
+
+
+class MultiRootRepositoryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        validator.errors.clear()
+        validator.warnings.clear()
+
+    def tearDown(self) -> None:
+        validator.errors.clear()
+        validator.warnings.clear()
+
+    def _write_skill(self, root: Path, plugin: str, skill: str) -> None:
+        skill_dir = root / "plugins" / plugin / "skills" / skill
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {skill}\ndescription: A skill.\n---\n\nBody.\n",
+            encoding="utf-8",
+        )
+
+    def _write_plugin(self, root: Path, name: str) -> None:
+        plugin_dir = root / "plugins" / name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "$schema": validator.PLUGIN_SCHEMA,
+                    "name": name,
+                    "version": "1.0.0",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _write_market(self, root: Path, names: list[str]) -> None:
+        market = root / ".github" / "plugin"
+        market.mkdir(parents=True, exist_ok=True)
+        (market / "marketplace.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-market",
+                    "owner": {"name": "Owner"},
+                    "metadata": {"version": "1.0.0"},
+                    "plugins": [
+                        {
+                            "name": name,
+                            "version": "1.0.0",
+                            "source": f"./plugins/{name}",
+                        }
+                        for name in names
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _write_support(self, root: Path) -> None:
+        (root / "README.md").write_text("# Test\n", encoding="utf-8")
+        (root / "CHANGELOG.md").write_text("## [1.0.0]\n", encoding="utf-8")
+
+    def _run_main(self) -> int:
+        with contextlib.redirect_stdout(io.StringIO()):
+            return validator.main()
+
+    def test_main_accepts_two_valid_plugins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for plugin in ("alpha", "beta"):
+                self._write_plugin(root, plugin)
+                self._write_skill(root, plugin, f"{plugin}-skill")
+            self._write_market(root, ["alpha", "beta"])
+            self._write_support(root)
+            with mock.patch.object(validator, "ROOT", root):
+                result = self._run_main()
+        self.assertEqual(result, 0, validator.errors)
+
+    def test_main_reports_duplicate_skill_across_plugins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for plugin in ("alpha", "beta"):
+                self._write_plugin(root, plugin)
+                self._write_skill(root, plugin, "shared-name")
+            self._write_market(root, ["alpha", "beta"])
+            self._write_support(root)
+            with mock.patch.object(validator, "ROOT", root):
+                result = self._run_main()
+        self.assertEqual(result, 1)
+        self.assertTrue(
+            any("duplicate skill name" in error for error in validator.errors)
+        )
+
+    def test_main_reports_missing_plugin_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_skill(root, "ghost", "ghost-skill")
+            self._write_market(root, ["ghost"])
+            self._write_support(root)
+            with mock.patch.object(validator, "ROOT", root):
+                result = self._run_main()
+        self.assertEqual(result, 1)
+        self.assertTrue(any("missing plugin.json" in error for error in validator.errors))
+
+    def test_main_reports_missing_skills_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_plugin(root, "alpha")
+            self._write_market(root, ["alpha"])
+            self._write_support(root)
+            with mock.patch.object(validator, "ROOT", root):
+                result = self._run_main()
+        self.assertEqual(result, 1)
+        self.assertTrue(any("missing skills/" in error for error in validator.errors))
+
+    def test_repository_main_passes(self) -> None:
+        self.assertEqual(self._run_main(), 0, validator.errors)
+
+
+class ProfileContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        validator.errors.clear()
+        validator.warnings.clear()
+
+    def tearDown(self) -> None:
+        validator.errors.clear()
+        validator.warnings.clear()
+
+    def _profile(self) -> dict:
+        path = validator.ROOT / "tests" / "fixtures" / "profile" / "example.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_committed_sample_is_valid(self) -> None:
+        validator.check_profile_contract(self._profile(), "profile")
+        self.assertEqual(validator.errors, [])
+
+    def test_missing_schema_is_rejected(self) -> None:
+        profile = self._profile()
+        del profile["schema"]
+        validator.check_profile_contract(profile, "profile")
+        self.assertTrue(any("'schema' must be" in error for error in validator.errors))
+
+    def test_unknown_command_is_rejected(self) -> None:
+        profile = self._profile()
+        profile["commands"]["deploy"] = {"cmd": "make deploy", "source": "Makefile"}
+        validator.check_profile_contract(profile, "profile")
+        self.assertTrue(any("unknown command" in error for error in validator.errors))
+
+    def test_command_without_source_is_rejected(self) -> None:
+        profile = self._profile()
+        profile["commands"]["test"] = {"cmd": "pytest"}
+        validator.check_profile_contract(profile, "profile")
+        self.assertTrue(
+            any("'source' must be a non-empty string" in error for error in validator.errors)
+        )
+
+    def test_absolute_workspace_path_is_rejected(self) -> None:
+        profile = self._profile()
+        profile["workspaces"]["/etc/passwd"] = {"commands": {}}
+        validator.check_profile_contract(profile, "profile")
+        self.assertTrue(
+            any("relative POSIX path" in error for error in validator.errors)
+        )
+
+    def test_workspace_must_override_commands(self) -> None:
+        profile = self._profile()
+        profile["workspaces"]["services/api"] = {}
+        validator.check_profile_contract(profile, "profile")
+        self.assertTrue(any("missing 'commands'" in error for error in validator.errors))
+
+    def test_invalid_ci_is_rejected(self) -> None:
+        profile = self._profile()
+        profile["ci"] = {"file": "", "jobs": "test"}
+        validator.check_profile_contract(profile, "profile")
+        self.assertTrue(
+            any("'file' must be a non-empty string" in error for error in validator.errors)
+        )
+        self.assertTrue(
+            any("'jobs' must be an array" in error for error in validator.errors)
+        )
 
 
 class OkfBundleFixtureTests(unittest.TestCase):

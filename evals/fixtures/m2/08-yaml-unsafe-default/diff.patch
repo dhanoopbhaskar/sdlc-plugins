@@ -1,0 +1,14 @@
+--- a/config.py
++++ b/config.py
+@@ -1,5 +1,5 @@
+ def load_config(raw: dict) -> dict:
+     return {
+-        "require_tls": raw.get("require_tls", True),
++        "require_tls": raw.get("requre_tls", False),
+         "timeout_seconds": int(raw.get("timeout_seconds", 30)),
+     }
+--- /dev/null
++++ b/config.yml
+@@ -0,0 +1,2 @@
++require_tls: true
++timeout_seconds: 30

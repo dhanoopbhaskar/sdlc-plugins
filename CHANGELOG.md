@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-06
+
+### Added
+- `plan` skill: falsifiable acceptance criteria, a risk register, a review tier, and a
+  bootstrapped `.sdlc/profile.json`, plus spike mode and an exhaustive `T3` depth with a
+  transitive impact map, approach decision, and blast radius.
+- `investigate` skill: requires a demonstrated root cause before a fix, with reproduction,
+  minimisation, isolation, and regression, infra, and flaky proof modes.
+- `merge-gate` skill: four-phase review with three disjoint lenses and a computed
+  `sdlc.verdict/v1` verdict; treats `T3` with T2 isolation and sign-off rules.
+- `evals/` suite: verdict and investigation validators, Gate A–D runners, defect, integrity,
+  and root-cause fixtures, and a context-budget check.
+- Destructive-operation guard in `sdlc-behavior-principles`.
+- `repo-reconnaissance` now emits or enriches `.sdlc/profile.json` with the same contract as
+  `plan`.
+
+### Changed
+- The repository is now a marketplace of two plugins, `sdlc` and `discovery` (from
+  `sdlc-core` and `sdlc-discovery`); the repository root is no longer a plugin.
+- The validator is multi-root, cross-checks marketplace entries, enforces lockstep versions,
+  and validates the committed profile and verdict samples.
+- CI runs the validator, Gate A, Gate D, the context-budget check, and both test suites.
+- README documents per-plugin installation, the `sdlc`-only vs `sdlc` + `discovery` decision,
+  and the eval gates.
+- Version `0.2.1` → `0.3.0`, lockstep across both plugins and the marketplace metadata.
+
+### Removed
+- Root `plugin.json` and `mcp.json`, and the old single-plugin marketplace entry.
+
+### Migration
+- Install with `copilot plugin install sdlc@sdlc-plugins`, plus
+  `copilot plugin install discovery@sdlc-plugins` when discovery work is needed.
+- `verify-task` remains standalone; `merge-gate` consumes its five evidence items in Phase 2.
+
 ## [0.2.1] - 2026-11-04
 
 ### Fixed
