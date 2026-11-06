@@ -37,6 +37,7 @@ Rules:
 - A timeout is an exit state, not a pass. Record it.
 - A command that cannot start is `BLOCKED-ENV` and names the prerequisite.
 - An empty test selection (zero tests collected) is not a pass. Record the count.
+- Every failed, timed-out, or empty required check must also become an `unproven` item with `accepted: false` in the verdict; a receipt alone is not a blocking input.
 - Never paste a full log with credentials. Redact and hash the original.
 
 ## Which commands
