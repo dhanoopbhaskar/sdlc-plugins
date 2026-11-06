@@ -55,7 +55,7 @@ and recomputes `verdict`. A mismatch fails.
 | `findings` | array | see below |
 | `unproven` | array | `{item, accepted, reason}`; `accepted: false` blocks |
 | `coverage_gaps` | array | `{lens, item, t2_relevant}`; a `t2_relevant` gap must also appear in `unproven` |
-| `blocked_env` | array of strings | non-empty forces `BLOCKED-ENV` |
+| `blocked_env` | array of strings | non-empty forces `BLOCKED-ENV`; includes an unavailable restricted sandbox or tree-scoped approval |
 | `signoff` | object or null | `{approver, date, scope}`; required for T2/T3 `MERGE-READY` |
 | `verdict` | string | must equal the computed verdict exactly |
 

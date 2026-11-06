@@ -12,13 +12,16 @@ Facts only. No findings, no severity, no recommendations. A lens may challenge a
 
 ## Command receipts
 
-Before running a command, print:
+A base-profile command is provenance, not permission to execute on the reviewed tree. Before
+running a command, print:
 
 ```
-command:  <exact command>
-cwd:      <absolute path>
-source:   <profile source file> @ <base_sha>
-approval: sha256:<hash of cmd + cwd + env allowlist>
+command:     <exact command>
+cwd:         <absolute path>
+source:      <profile source file> @ <base_sha>
+tree_sha256: sha256:<digest of the executable tree>
+sandbox:     restricted (network: none; credentials: none; writes: <paths>)
+approval:    sha256:<hash of cmd + cwd + env allowlist + tree_sha256 + sandbox profile>
 ```
 
 After running, record:
@@ -34,6 +37,13 @@ tail:
 Rules:
 
 - One receipt per command. Do not merge two runs into one line.
+- A receipt is valid only with a restricted-sandbox profile and a `tree_sha256` that covers
+  every file the command can load or execute. Compute it on the disposable copy immediately
+  before the run; a tree change invalidates approval.
+- If the restricted sandbox or tree-scoped approval is unavailable, do not run. Record
+  `execution: unavailable` with the reason, add the prerequisite to `blocked_env`, and add
+  the check to `unproven` with `accepted: false`. Never imply the check passed.
+- No host credentials and no network. A command that needs either is `BLOCKED-ENV`.
 - A timeout is an exit state, not a pass. Record it.
 - A command that cannot start is `BLOCKED-ENV` and names the prerequisite.
 - An empty test selection (zero tests collected) is not a pass. Record the count.
@@ -42,12 +52,16 @@ Rules:
 
 ## Which commands
 
-Use the base-commit profile for the touched workspaces. Run `test` always; run `lint`, `typecheck`, and `build` when the change can affect them.
+Use the base-commit profile for the touched workspaces, then apply the trust boundary in
+[profile.md](profile.md). Run `test` always; run `lint`, `typecheck`, and `build` when the
+change can affect them.
 
 - A `null` command means "not declared". Do not invent one.
-- If a declared command is stale or wrong, do not silently substitute. Run a command the user types in this session and record it as `user-supplied`, or record the gap as `UNPROVEN`.
+- A declared command still needs the restricted sandbox and tree-scoped approval. Without
+  them the command is unavailable: record it as `BLOCKED-ENV` and `unproven`, not as a pass.
+- If a declared command is stale or wrong, do not silently substitute. Run a command the user types in this session and record it as `user-supplied`, or record the gap as `UNPROVEN`. A user-supplied command has the same sandbox and approval requirements.
 - If the profile has no test command and the AC requires behavior, the verdict cannot be `MERGE-READY` without user-supplied evidence.
-- Commands that need the network or credentials are `BLOCKED-ENV` when unavailable. Do not work around them silently.
+- Commands that need the network or credentials are `BLOCKED-ENV`. Never run them with host credentials or network access to get a green result.
 
 ## Regression evidence
 
@@ -75,6 +89,8 @@ AC 1: "<verbatim>" — source: <path>
 command:        uv run pytest -q
 cwd:            /repo
 source:         pyproject.toml @ <base_sha>
+tree_sha256:    sha256:<hex>
+sandbox:        restricted (network: none; credentials: none; writes: /tmp/run-abc)
 approval:       sha256:<hex>
 exit:           0
 duration:       12.4s

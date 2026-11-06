@@ -118,6 +118,8 @@ Fix:         key the write by request id
 - [ ] No secret values; masked prefixes only.
 - [ ] P2/P3 are listed and did not block.
 - [ ] Every T2-relevant coverage gap is in `unproven`.
+- [ ] Every executed command has a restricted-sandbox receipt and a `tree_sha256` approval.
+- [ ] Any command without a sandbox or tree-scoped approval is in `blocked_env` and `unproven`, never reported as a pass.
 - [ ] `isolation` matches what actually happened.
 - [ ] `tier` came from the base profile plus the diff.
 - [ ] `diff_hash` matches the bytes reviewed.

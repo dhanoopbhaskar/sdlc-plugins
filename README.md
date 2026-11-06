@@ -69,7 +69,7 @@ Once installed, skills are picked up automatically by the agent when their `desc
 - Ask the agent to document a codebase and it will apply the `code-documenter` workflow.
 - Ask the agent to map a legacy system before a migration and it will apply `legacy-code-discovery`, scaling its survey with `repo-reconnaissance`, `system-cartography`, and `migration-seams`.
 
-`plan` and `repo-reconnaissance` can create `.sdlc/profile.json`, a committed, user-owned description of the project's stacks, commands, risk paths, and exclusions. `merge-gate` reads it from the base commit and never executes commands that appear only in the reviewed tree.
+`plan` and `repo-reconnaissance` can create `.sdlc/profile.json`, a committed, user-owned description of the project's stacks, commands, risk paths, and exclusions. `merge-gate` reads it from the base commit and never executes commands that appear only in the reviewed tree. A base-profile command is provenance, not permission: commands run only in a restricted sandbox (no ambient credentials or network) and only after approval binds them to the executable tree. If either is unavailable, the proof is recorded as unavailable, never as a pass.
 
 ## Project Structure
 

@@ -25,23 +25,31 @@ git diff "$BASE_SHA"..HEAD
 
 ## Dirty section
 
-The working tree is reviewed separately, never merged into the committed diff:
+The working tree is reviewed separately, never merged into the committed diff. Compare
+`HEAD` with the working tree so both staged and unstaged changes are included:
 
 ```bash
 git status --porcelain=v1
-git diff --stat
-git diff
+git diff HEAD --stat
+git diff HEAD
 git ls-files --others --exclude-standard
 ```
 
-Untracked files are listed by path. Read them only if they are text and in scope; otherwise mark them `unread`.
+Do not use a bare `git diff`: it compares the working tree with the index, so it is empty
+after `git add` even though the files differ from `HEAD`. `git diff HEAD` covers tracked
+changes in both the index and the working tree; untracked files are not in any diff and are
+listed separately. Read untracked files by path only if they are text and in scope; otherwise
+mark them `unread`.
 
 ## Diff hash
 
 Hash the exact bytes reviewed:
 
 - committed: `git diff "$BASE_SHA"..HEAD`
-- dirty: `git diff` plus the concatenated untracked file contents, in path order
+- dirty: `git diff HEAD` plus the concatenated untracked file contents, in path order
+
+Hash the same diff the dirty section reviewed. `git diff HEAD` includes staged and unstaged
+tracked changes; a bare `git diff` would hash only the unstaged remainder.
 
 Write it as `sha256:<hex>`. The same value goes in `verdict.md`. For a fixture, hash `diff.patch`.
 
