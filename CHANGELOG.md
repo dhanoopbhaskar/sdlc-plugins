@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `discovery` (`repo-reconnaissance`, `system-cartography`, `migration-seams`,
   `legacy-code-discovery`, `code-documenter`).
 - Plugin names shortened: `sdlc-core` → `sdlc` and `sdlc-discovery` → `discovery`.
-  Plugin directories, manifests, marketplace sources, install commands, docs, and tests
+  Plugin directories, manifests, marketplace sources, install commands, and tests
   follow the new names.
 - `scripts/validate_skills.py` is multi-root: it validates every `plugins/*/plugin.json`
   and `skills/` tree, cross-checks marketplace entries against plugin roots, enforces
