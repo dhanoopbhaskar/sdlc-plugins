@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2026-11-06
 
 ### Added
+- `plan` skill: turns a request into a spec with falsifiable acceptance criteria, a risk
+  register, proposed review tier, risk paths, and a bootstrapped `.sdlc/profile.json`.
+  Includes an explicit spike mode and a profile contract reference.
+- `investigate` skill: enforces a demonstrated root cause before a fix, with reproduction,
+  minimisation, isolation, a cause statement, and regression, infra, and flaky proof modes.
+- `repo-reconnaissance` now emits or enriches `.sdlc/profile.json` with the same schema,
+  probe order, and workspace resolution as `plan`, without downgrading an existing profile.
+- Destructive-operation guard in `sdlc-behavior-principles`: deletes, bulk updates, history
+  rewrites, schema drops, and dependency removal require explicit confirmation.
 - `merge-gate` skill: a four-phase review (scope, proof, attack, merge) with three disjoint
   lenses (side effects, security, blast radius) and a computed `sdlc.verdict/v1` verdict.
 - Full `merge-gate` reference set: scope resolution and diff hashing, proof receipts and
@@ -29,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The repository is now a marketplace of two plugins instead of a single plugin:
-  `sdlc` (`sdlc-behavior-principles`, `merge-gate`, `verify-task`) and
+  `sdlc` (`sdlc-behavior-principles`, `plan`, `merge-gate`, `investigate`, `verify-task`) and
   `discovery` (`repo-reconnaissance`, `system-cartography`, `migration-seams`,
   `legacy-code-discovery`, `code-documenter`).
 - Plugin names shortened: `sdlc-core` → `sdlc` and `sdlc-discovery` → `discovery`.
@@ -42,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cross-references, lockstep versions, duplicate skill names across plugins, and the
   profile contract.
 - CI now runs the validator, Gate A, the context-budget check, and both test suites.
-- README documents per-plugin installation, the `sdlc` vs `sdlc` + `discovery` decision,
+- README documents per-plugin installation, the `sdlc`-only vs `sdlc` + `discovery` decision,
   the three eval gates, and the context-budget check.
 - Version `0.2.1` → `0.3.0`, lockstep across both plugins and the marketplace metadata.
 

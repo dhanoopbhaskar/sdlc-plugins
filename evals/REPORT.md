@@ -49,7 +49,7 @@ Estimates use `ceil(characters / 4)`.
 
 | Budget | Estimate | Target |
 |---|---|---|
-| Core install descriptions (always-on) | ~216 tokens | ≤ 275 |
+| Core install descriptions (always-on) | ~266 tokens (includes `plan` and `investigate`) | ≤ 275 |
 | Full static gate set (one lens at a time) | ~8.2k tokens | ≤ 15k |
 
 The static set leaves roughly 6.8k estimated tokens for the diff, ACs, and

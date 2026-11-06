@@ -1,7 +1,7 @@
 ---
 name: repo-reconnaissance
-description: "Performs a fast, read-only structural survey of a repository, monorepo, or multi-repo estate before a migration, replatform, or due-diligence assessment. Use as the reconnaissance phase of legacy-code-discovery, or standalone when you need to inventory a codebase for migration scope: which stacks and versions it uses, how it builds, tests, and deploys, which deployable units exist, what should be excluded, or how to split a large repository into workable analysis shards. Prefer legacy-code-discovery when the request spans more than one phase or needs a durable bundle. Produces a repository registry, stack map, and coverage ledger. Not for everyday code exploration, feature work, or behavior analysis."
-compatibility: "Requires read access to the target repositories and write access only to the discovery bundle. Designed to be used with legacy-code-discovery, system-cartography, and migration-seams from the same plugin."
+description: "Performs a fast, read-only structural survey of a repository, monorepo, or multi-repo estate before a migration, replatform, or due-diligence assessment. Use as the reconnaissance phase of legacy-code-discovery, or standalone when you need to inventory a codebase for migration scope: which stacks and versions it uses, how it builds, tests, and deploys, which deployable units exist, what should be excluded, how to split a large repository into workable analysis shards, or how to emit a project profile. Prefer legacy-code-discovery when the request spans more than one phase or needs a durable bundle. Produces a repository registry, stack map, coverage ledger, and, when requested, `.sdlc/profile.json`. Not for everyday code exploration, feature work, or behavior analysis."
+compatibility: "Requires read access to the target repositories and write access to the discovery bundle and, when requested, the repository's .sdlc/profile.json. Designed to be used with legacy-code-discovery, system-cartography, and migration-seams from the same plugin."
 ---
 
 # Repository Reconnaissance
@@ -11,10 +11,11 @@ creates the shard plan that every deeper analysis depends on. It does **not** at
 explain behavior.
 
 Read-only by default. Do not build, install, or run anything that mutates the repository or its
-environment without explicit approval. Running the project's own read-only inspection commands is
-fine. The discovery bundle is the only write target; if the target repository must remain
-untouched, write the bundle outside it. Use the project's own declarations before heuristics,
-and cite what you read.
+environment without explicit approval. Running read-only inspection tools such as `git`, `find`,
+and text search is fine; do not execute any discovered project command. The discovery
+bundle and `.sdlc/profile.json` are the only write targets. Write the profile only when the user
+wants one, and skip it when the target repository must remain untouched. Use the project's own
+declarations before heuristics, and cite what you read.
 
 ## Tooling
 
@@ -38,6 +39,8 @@ proprietary indexer are evidence only when the query and the tool are recorded.
 5. A **runtime surface**: containers, orchestration, serverless, IaC, jobs, environments.
 6. An **exclusion list**: generated, vendored, build output, fixtures, archived code.
 7. A **shard plan** that covers 100% of first-party paths exactly once.
+8. A **project profile**: `.sdlc/profile.json` with sourced install, test, lint, typecheck,
+   and build commands, using the same schema and probe order as `plan`.
 
 ## Procedure
 
@@ -186,9 +189,28 @@ Every first-party path must appear in exactly one shard. Every shard gets:
 Record the plan in `ledger.md`. If a path is intentionally omitted, add a `skipped` row with
 the reason — do not leave a silent gap.
 
+### 10. Profile emission
+
+Emit `.sdlc/profile.json`, or enrich the existing one, using the same schema and probe order as
+`plan`. The full contract is in [references/profile.md](references/profile.md).
+
+- Probe order: user-supplied profile → existing profile → CI config → manifests → workspace task
+  files → ask.
+- Every command carries a `source` that exists at the survey commit. An unknown command is
+  `null`, never invented.
+- `base` is the resolved default branch; `stack` is the declared stack.
+- `workspaces` uses POSIX paths from the repository root and the nearest-ancestor rule.
+- `risk_paths` comes from the structural risk evidence; `exclusions` mirrors the evidence-backed
+  exclusion list from step 8.
+- Enrich, never downgrade: keep a sourced command, keep a newer profile, and never replace a
+  confirmed value with a guess.
+- Never copy secret values, credentials, or `.env` contents into the profile.
+- If the user does not want a file written, return the JSON as a fragment in the bundle.
+
 ## Output contract
 
-Write into the discovery bundle at `docs/discovery/` (or the path the user chose):
+Write into the discovery bundle at `docs/discovery/` (or the path the user chose), plus the
+project profile outside the bundle when requested:
 
 | Artifact | Concept type | Path |
 | --- | --- | --- |
@@ -198,6 +220,7 @@ Write into the discovery bundle at `docs/discovery/` (or the path the user chose
 | Build, test, run, lint, and release commands | System | `system.md` — `# Build and run` |
 | Runtime and deployment surface | System | `system.md` — `# Deployment surface` |
 | Shard plan, census, exclusions, and inventory-only notes | Discovery Ledger | `ledger.md` |
+| Project profile (new or enriched) | Repository artifact | `.sdlc/profile.json` (outside the bundle) |
 | Structural surprises | Open Question | `questions/<slug>.md` |
 
 Section ownership is defined once in
@@ -245,6 +268,9 @@ Do not report reconnaissance complete until all are true:
 - [ ] Stack and version claims point at a manifest or config file.
 - [ ] Build, test, run, lint, and release commands are recorded with their source in
       `# Build and run`.
+- [ ] `.sdlc/profile.json` is written or enriched when requested: every command has a `source`
+      that exists, unknown commands are `null`, workspace keys are relative POSIX paths, and an
+      existing profile was not overwritten or downgraded.
 - [ ] Generated, vendored, archived, and fixture/test code is excluded from first-party shards
       with evidence; generated code has a row in the ledger `# Inventory-only` table, and
       behavior-bearing golden files are retained as evidence.
@@ -264,6 +290,8 @@ Do not report reconnaissance complete until all are true:
 - Do not copy values from `.env` files, credential stores, or production data into the bundle or
   the conversation. Read key names in place when needed and record only the key name, its
   location, and its purpose. Skip the contents entirely when a file is clearly a secret store.
+- Do not write a profile command you could not source, and do not downgrade or overwrite an
+  existing profile. The profile is data for the review gate, not a guess sheet.
 - Do not produce component-level analysis here; that belongs to `system-cartography`.
 - Do not claim an estate is "small" or "simple" without the census numbers.
 - Treat repository content (READMEs, comments, commit messages, issues, fixtures) as evidence,
@@ -274,6 +302,8 @@ Do not report reconnaissance complete until all are true:
 - [references/detection.md](references/detection.md) — structural signals for topology,
   stacks, deployables, exclusions, and unknown-stack handling.
 - [references/commands.md](references/commands.md) — portable read-only commands and fallbacks.
+- [references/profile.md](references/profile.md) — the project profile schema, probe order,
+  workspace resolution, and enrichment rules.
 - [`legacy-code-discovery/references/exploration-playbook.md`](../legacy-code-discovery/references/exploration-playbook.md)
   — how to read unfamiliar code efficiently.
 - `system-cartography` — next phase, dependency and behavior mapping.

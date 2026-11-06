@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "sdlc",
-      "description": "Core SDLC skills: merge-gate review, completion verification, and behavioral guardrails.",
+      "description": "Core SDLC skills: planning, root-cause investigation, completion verification, merge-gate review, and behavioral guardrails.",
       "version": "0.3.0",
       "source": "./plugins/sdlc",
       "author": {
@@ -25,6 +25,9 @@
       "keywords": [
         "sdlc",
         "skills",
+        "planning",
+        "debugging",
+        "root-cause",
         "code-review",
         "merge-gate",
         "verification",
@@ -33,7 +36,7 @@
     },
     {
       "name": "discovery",
-      "description": "Evidence-graded discovery of unfamiliar and legacy systems: reconnaissance, mapping, migration seams, and OKF documentation.",
+      "description": "Evidence-graded discovery of unfamiliar and legacy systems: reconnaissance, project profiles, mapping, migration seams, and OKF documentation.",
       "version": "0.3.0",
       "source": "./plugins/discovery",
       "author": {
@@ -53,6 +56,7 @@
         "discovery",
         "reconnaissance",
         "cartography",
+        "profile",
         "risk"
       ]
     }

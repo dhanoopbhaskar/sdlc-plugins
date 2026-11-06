@@ -33,11 +33,26 @@ Use these guardrails with repository conventions and stage prompts.
 - If checks fail, iterate or report a concrete blocker with evidence.
 - Prefer incremental steps over all-at-once changes.
 
+## 5. Destructive Operations
+
+Confirm with the user before an operation that can destroy or rewrite state:
+
+- deleting files, rows, tables, buckets, or environments;
+- bulk updates or deletes;
+- `git reset --hard`, `git clean -fdx`, force-push, or history rewrite;
+- dropping or recreating a database or schema;
+- removing a dependency, migration, or feature flag;
+- any command against production or shared data.
+
+State what will be destroyed, the scope, and whether it is reversible before asking. If the
+confirmation is ambiguous, treat it as a refusal. Read-only inspection does not need
+confirmation.
+
 ## Stage Focus
 
 - Planning: capture assumptions and unresolved questions before final scope.
 - Implementation: start each unit with its intended outcome and verification target; keep edits aligned to approved plan items.
-- Review: verify acceptance-criteria coverage and flag out-of-scope changes; classify their severity.
+- Review: assume the diff may be hiding something; clean code is not evidence. Verify acceptance-criteria coverage, trace every changed line to approved scope, and flag or revert what does not.
 
 ## Quick Self-Check
 

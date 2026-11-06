@@ -6,12 +6,12 @@ This repository publishes two plugins:
 
 | Plugin | What it is for | Skills |
 | --- | --- | --- |
-| `sdlc` | Day-to-day change work: review before merge, verify completion, keep diffs honest. | `sdlc-behavior-principles`, `merge-gate`, `verify-task` |
+| `sdlc` | Day-to-day change work: plan the change, investigate failures, verify completion, and keep diffs honest before merge. | `sdlc-behavior-principles`, `plan`, `merge-gate`, `investigate`, `verify-task` |
 | `discovery` | Understanding an unfamiliar or legacy estate before a migration. | `repo-reconnaissance`, `system-cartography`, `migration-seams`, `legacy-code-discovery`, `code-documenter` |
 
 ## Which plugins do I need?
 
-- **Installing only one?** Install `sdlc`. It is the smaller, always-useful set and covers the review and verification loop.
+- **Installing only one?** Install `sdlc`. It is the smaller, always-useful set and covers the plan → implement → investigate → review → verify loop.
 - **Doing migration or due-diligence work?** Install `sdlc` plus `discovery`. The discovery skills produce the evidence bundle; they do not replace the review gate.
 - **Want the whole loop?** Install both. `merge-gate` is designed to consume the same evidence vocabulary the other skills produce.
 
@@ -23,8 +23,10 @@ The plugins are versioned in lockstep: one version, one changelog, one release t
 
 | Skill | Description |
 | --- | --- |
-| [sdlc-behavior-principles](plugins/sdlc/skills/sdlc-behavior-principles/SKILL.md) | Behavioral guardrails for planning, implementing, and reviewing changes: surface assumptions, keep solutions simple, make surgical diffs, and require verifiable checks. |
+| [sdlc-behavior-principles](plugins/sdlc/skills/sdlc-behavior-principles/SKILL.md) | Behavioral guardrails for planning, implementing, and reviewing changes: surface assumptions, keep solutions simple, make surgical diffs, require verifiable checks, and confirm destructive operations. |
+| [plan](plugins/sdlc/skills/plan/SKILL.md) | Turns a request into a spec with falsifiable acceptance criteria, a risk register, a review tier, and a `.sdlc/profile.json` project profile. Includes an explicit spike mode. |
 | [merge-gate](plugins/sdlc/skills/merge-gate/SKILL.md) | Reviews a change before merge: scope, proof, three attack lenses, and a computed verdict that never claims merge-ready without evidence. |
+| [investigate](plugins/sdlc/skills/investigate/SKILL.md) | Finds and proves a root cause before fixing a failing test, stack trace, or wrong output, then proves the fix with a regression test or an explicit infra proof. |
 | [verify-task](plugins/sdlc/skills/verify-task/SKILL.md) | Enforces explicit proof of correctness (requirement, test, regression, diff, unproven) before a task is declared done. |
 
 ### `discovery`
@@ -33,7 +35,7 @@ The plugins are versioned in lockstep: one version, one changelog, one release t
 | --- | --- |
 | [code-documenter](plugins/discovery/skills/code-documenter/SKILL.md) | Generates and maintains [OKF](plugins/discovery/skills/code-documenter/references/SPEC.md)-compliant knowledge bases documenting a codebase's modules, classes, functions, architecture, and configuration. |
 | [legacy-code-discovery](plugins/discovery/skills/legacy-code-discovery/SKILL.md) | Orchestrates evidence-graded discovery of a legacy estate before a migration: charter, coverage ledger, phases, gates, and an OKF decision dossier. |
-| [repo-reconnaissance](plugins/discovery/skills/repo-reconnaissance/SKILL.md) | Read-only structural survey: repository topology, stacks and versions, build/test/run entry points, deployable units, exclusions, and a scalable shard plan. |
+| [repo-reconnaissance](plugins/discovery/skills/repo-reconnaissance/SKILL.md) | Read-only structural survey: repository topology, stacks and versions, build/test/run entry points, deployable units, exclusions, a scalable shard plan, and an emitted or enriched `.sdlc/profile.json`. |
 | [system-cartography](plugins/discovery/skills/system-cartography/SKILL.md) | Maps components, typed dependency edges, entry points, end-to-end flows, integration contracts, and data ownership without assuming a tech stack. |
 | [migration-seams](plugins/discovery/skills/migration-seams/SKILL.md) | Converts the map into migration decisions: risk scoring, coupling hotspots, behavioral parity hazards, seams, readiness, and slice sequencing. |
 
@@ -60,10 +62,14 @@ Install `discovery` only when the task is migration or due-diligence work.
 Once installed, skills are picked up automatically by the agent when their `description` matches the current task—no manual invocation is required. For example:
 
 - Ask the agent to plan, implement, or review a change and it will apply the `sdlc-behavior-principles` guardrails.
+- Ask the agent to plan or break down a change and it will use `plan` to write falsifiable acceptance criteria, a risk register, a review tier, and the project profile.
+- Ask the agent to debug a failing test or stack trace and it will use `investigate` to prove the root cause before fixing it.
 - Ask the agent to confirm a task is complete and it will apply the `verify-task` checklist.
 - Ask the agent to review a diff before merging and it will run `merge-gate`.
 - Ask the agent to document a codebase and it will apply the `code-documenter` workflow.
 - Ask the agent to map a legacy system before a migration and it will apply `legacy-code-discovery`, scaling its survey with `repo-reconnaissance`, `system-cartography`, and `migration-seams`.
+
+`plan` and `repo-reconnaissance` can create `.sdlc/profile.json`, a committed, user-owned description of the project's stacks, commands, risk paths, and exclusions. `merge-gate` reads it from the base commit and never executes commands that appear only in the reviewed tree.
 
 ## Project Structure
 

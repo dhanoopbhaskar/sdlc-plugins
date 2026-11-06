@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "discovery",
   "version": "0.3.0",
-  "description": "Evidence-graded discovery of unfamiliar and legacy systems: reconnaissance, mapping, migration seams, and OKF documentation.",
+  "description": "Evidence-graded discovery of unfamiliar and legacy systems: reconnaissance, project profiles, mapping, migration seams, and OKF documentation.",
   "author": {
     "name": "Dhanoop Bhaskar",
     "email": "dhaskarbhaskar@gmail.com",
@@ -20,6 +20,7 @@
     "discovery",
     "reconnaissance",
     "cartography",
+    "profile",
     "risk"
   ]
 }

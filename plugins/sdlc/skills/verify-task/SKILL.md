@@ -1,6 +1,6 @@
 ---
 name: verify-task
-description: "Verifies AI-generated code changes by enforcing explicit proof of correctness across five core dimensions before declaring a task DONE. Use before accepting or claiming that a task is complete."
+description: "Requires explicit proof before declaring a task done: requirement, test, regression, diff justification, and unproven gaps."
 ---
 
 Before accepting or claiming a task is DONE, you must compile and present the following 5 pieces of verification evidence:
