@@ -24,7 +24,7 @@ from pathlib import Path
 import verdict as verdict_mod
 
 SCHEMA = "sdlc.investigation/v1"
-CONFIDENCE = {"confirmed", "unconfirmed"}
+CONFIDENCE = {"confirmed", "probable", "unconfirmed"}
 PROOF_KINDS = {"REGRESSION-TEST", "INFRA-PROOF", "FLAKY-PROOF"}
 PROOF_FIELDS = {
     "REGRESSION-TEST": ("test", "before", "after", "suite"),
