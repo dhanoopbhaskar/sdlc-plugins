@@ -85,10 +85,12 @@ plugins/
     skills/
 evals/
   verdict.py              # Validates and recomputes a merge-gate verdict artifact
-  run.py                  # Gate A (format), Gate B (integrity), Gate C (recall)
+  investigation.py        # Validates a root-cause investigation report
+  run.py                  # Gate A (format), B (integrity), C (recall), D (root cause)
   measure.py              # Estimates install and per-run context budgets
   fixtures/m0/            # M0 prototype fixtures for the gate
   fixtures/m2/            # 8 defect fixtures and 3 integrity fixtures
+  fixtures/m3/            # 3 root-cause fixtures with regression tests
   runs/                   # Recorded agent runs used by Gates B and C
   recall/                 # Held-out score format; the held-out set is not committed
 scripts/
@@ -111,6 +113,7 @@ Run the repository checks locally:
 ```shell
 python3 scripts/validate_skills.py
 python3 evals/run.py --gate=a
+python3 evals/run.py --gate=d
 python3 evals/measure.py
 python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s evals -v
@@ -124,9 +127,11 @@ contract, and the committed verdict fixtures.
 
 Gate A checks fixture schema, evidence format, provenance, redaction, and verdict arithmetic
 on every committed fixture. Gate B validates recorded integrity runs and fails on any unsafe
-pass. Gate C scores a held-out set supplied by the user; the held-out set is never committed
-and is not used to tune the gate. The same deterministic checks (validator, Gate A, context
-budgets, and unit tests) run in CI on every push and pull request.
+pass. Gate D checks the three root-cause fixtures: the reference report names the mechanism,
+cites evidence, records the alternatives, and the regression test fails before the fix and
+passes after it. Gate C scores a held-out set supplied by the user; the held-out set is never
+committed and is not used to tune the gate. The same deterministic checks (validator, Gate A,
+Gate D, context budgets, and unit tests) run in CI on every push and pull request.
 
 When bumping the plugin version, update every `plugin.json`, the marketplace metadata and
 entries, and any concrete `generated.by` example actors; the validator fails when they drift.

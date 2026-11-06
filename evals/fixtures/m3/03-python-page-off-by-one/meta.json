@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.investigation-fixture/v1",
+  "id": "m3/03-python-page-off-by-one",
+  "kind": "investigation",
+  "stack": "python",
+  "title": "Pagination slice drops the last item of a page (Python)",
+  "expected": {
+    "cause_tokens": [
+      "off-by-one",
+      "slice",
+      "end"
+    ],
+    "proof_kind": "REGRESSION-TEST",
+    "test": "test_app.PaginationTest.test_full_page_returns_size_items",
+    "changed_files": [
+      "app.py"
+    ]
+  }
+}

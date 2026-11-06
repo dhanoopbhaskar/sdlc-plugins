@@ -21,6 +21,8 @@ jobs:
         run: python3 scripts/validate_skills.py
       - name: Run Gate A (format and arithmetic)
         run: python3 evals/run.py --gate=a
+      - name: Run Gate D (root-cause fixtures)
+        run: python3 evals/run.py --gate=d
       - name: Check install and per-run context budgets
         run: python3 evals/measure.py
       - name: Test the validator

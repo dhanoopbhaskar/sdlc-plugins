@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.investigation-fixture/v1",
+  "id": "m3/02-python-mutable-default",
+  "kind": "investigation",
+  "stack": "python",
+  "title": "Mutable default argument leaks state between calls (Python)",
+  "expected": {
+    "cause_tokens": [
+      "mutable",
+      "default",
+      "shared"
+    ],
+    "proof_kind": "REGRESSION-TEST",
+    "test": "test_app.MutableDefaultTest.test_calls_do_not_share_state",
+    "changed_files": [
+      "app.py"
+    ]
+  }
+}

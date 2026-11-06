@@ -1,4 +1,4 @@
-# Eval report — M2 (2026-11-06)
+# Eval report — M2/M3 (2026-11-06)
 
 Reproduce with:
 
@@ -6,6 +6,8 @@ Reproduce with:
 python3 scripts/validate_skills.py
 python3 evals/run.py --gate=a
 python3 evals/run.py --gate=b
+python3 evals/run.py --gate=c --scores /path/to/held-out.json
+python3 evals/run.py --gate=d
 python3 evals/measure.py
 python3 -m unittest discover -s tests
 python3 -m unittest discover -s evals
@@ -17,7 +19,7 @@ python3 -m unittest discover -s evals
 - Schema, evidence format, provenance, redaction, diff hash, and verdict
   arithmetic are checked.
 - Every `diff.patch` applies to its `before/` tree and reproduces `after/`.
-- 90 validator tests and 47 eval tests pass.
+- 90 validator tests and 64 eval tests pass.
 
 ## Gate B — integrity
 
@@ -42,6 +44,20 @@ python3 -m unittest discover -s evals
 
 - **Limit:** the development fixtures are not a recall score and are never
   reported as one.
+
+## Gate D — root cause
+
+- 3/3 investigation fixtures pass (`m3/01`–`m3/03`): a cache key that omits
+  the tenant, a mutable default argument shared between calls, and a
+  pagination slice with an off-by-one end.
+- For each fixture the gate checks that the reference report is structurally
+  valid, names the expected mechanism, cites `file:line` evidence, records
+  the alternatives ruled out, and states a regression proof.
+- Each `diff.patch` applies to its `before/` tree and reproduces `after/`; the
+  `before/` test must fail and the `after/` test must pass.
+- **Limit:** the reports are reference artifacts written by the authoring
+  agent. Gate D proves the fixture and the report contract, not that an
+  independent agent diagnoses the cause in one pass.
 
 ## Context budget
 

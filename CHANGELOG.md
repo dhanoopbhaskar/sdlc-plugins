@@ -29,8 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tampering, weakened assertions). Each fixture has a before/after pair, an applying diff,
   a reference verdict, and a machine-readable expectation file.
 - `evals/run.py`: Gate A (format and arithmetic, runs in CI), Gate B (integrity, fails on any
-  unsafe pass), and Gate C (held-out recall with per-tier thresholds). Gate B has a committed
-  single-context self-run; Gate C takes a held-out score file that is never committed.
+  unsafe pass), Gate C (held-out recall with per-tier thresholds), and Gate D (root-cause
+  fixtures). Gate B has a committed single-context self-run; Gate C takes a held-out score
+  file that is never committed.
+- `evals/investigation.py` and `evals/test_investigation.py`: validate `sdlc.investigation/v1`
+  reports (cause, `file:line` evidence, alternatives ruled out, proof receipts, redaction) and
+  test the Gate D fixture checks.
+- Three root-cause fixtures under `evals/fixtures/m3/` across three Python mechanisms (cache
+  key omits the tenant, mutable default argument shared across calls, pagination slice end
+  off-by-one). Each has a before/after pair, an applying diff, a reference investigation
+  report, and a regression test that fails before the fix and passes after it.
 - `evals/measure.py`: estimates the always-on core description budget and the static
   per-run gate budget; CI fails when either target is exceeded.
 - Profile contract checking in the validator, with a committed sample profile.
@@ -50,9 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/test_validate_skills.py` now covers multi-root discovery, marketplace
   cross-references, lockstep versions, duplicate skill names across plugins, and the
   profile contract.
-- CI now runs the validator, Gate A, the context-budget check, and both test suites.
+- CI now runs the validator, Gate A, Gate D, the context-budget check, and both test suites.
 - README documents per-plugin installation, the `sdlc`-only vs `sdlc` + `discovery` decision,
-  the three eval gates, and the context-budget check.
+  the four eval gates, and the context-budget check.
 - Version `0.2.1` → `0.3.0`, lockstep across both plugins and the marketplace metadata.
 
 ### Removed

@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.investigation-fixture/v1",
+  "id": "m3/01-python-cache-key-tenant",
+  "kind": "investigation",
+  "stack": "python",
+  "title": "Cache key omits the tenant (Python)",
+  "expected": {
+    "cause_tokens": [
+      "tenant",
+      "cache",
+      "key"
+    ],
+    "proof_kind": "REGRESSION-TEST",
+    "test": "test_app.TenantCacheTest.test_same_user_in_different_tenants_does_not_share",
+    "changed_files": [
+      "app.py"
+    ]
+  }
+}

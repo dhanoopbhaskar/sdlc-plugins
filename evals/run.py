@@ -10,11 +10,16 @@ three integrity fixtures and fails on any unsafe pass.
 Gate C is the held-out recall release gate: it scores a held-out run supplied by
 the user. The held-out set is never committed and never used to tune the skill.
 
+Gate D is the root-cause gate: three failing fixtures, each with a reference
+investigation report, a before/after pair, an applying diff, and a regression
+test that must fail before the fix and pass after it.
+
 Usage:
 
     python3 evals/run.py --gate=a
     python3 evals/run.py --gate=b
     python3 evals/run.py --gate=c --scores /path/to/held-out.json
+    python3 evals/run.py --gate=d
 """
 
 from __future__ import annotations
@@ -22,12 +27,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import investigation as investigation_mod  # noqa: E402
 import verdict as verdict_mod  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,8 +45,10 @@ FIXTURES = ROOT / "evals" / "fixtures"
 RUNS = ROOT / "evals" / "runs"
 
 FIXTURE_SCHEMA = "sdlc.fixture/v1"
+INVESTIGATION_FIXTURE_SCHEMA = "sdlc.investigation-fixture/v1"
 GATE_B_SCHEMA = "sdlc.gate-b/v1"
 GATE_C_SCHEMA = "sdlc.gate-c/v1"
+M3_FIXTURES = FIXTURES / "m3"
 TIERS = ("T0", "T1", "T2")
 KINDS = ("defect", "integrity")
 
@@ -263,9 +275,26 @@ def _fixture_dirs(fixtures_dir: Path) -> list[Path]:
     )
 
 
+def _schema_of(fixture_dir: Path) -> object:
+    meta, _ = _load_json(fixture_dir / "meta.json")
+    return meta.get("schema") if meta is not None else None
+
+
+def _dirs_with_schema(fixtures_dir: Path, schema: str) -> list[Path]:
+    return [
+        path
+        for path in _fixture_dirs(fixtures_dir)
+        if _schema_of(path) == schema
+    ]
+
+
 def run_gate_a(fixtures_dir: Path = FIXTURES) -> tuple[bool, list[str], int]:
     """Run Gate A. Returns (ok, messages, fixture_count)."""
-    directories = _fixture_dirs(fixtures_dir)
+    directories = [
+        path
+        for path in _fixture_dirs(fixtures_dir)
+        if _schema_of(path) != INVESTIGATION_FIXTURE_SCHEMA
+    ]
     if not directories:
         return False, [f"no fixtures with meta.json under {fixtures_dir}"], 0
 
@@ -302,9 +331,175 @@ def run_gate_a(fixtures_dir: Path = FIXTURES) -> tuple[bool, list[str], int]:
     return not problems, messages + problems, len(directories)
 
 
+def _significant_files(root: Path) -> dict[str, bytes]:
+    """Return relative path -> bytes, ignoring caches the test run creates."""
+    files: dict[str, bytes] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if "__pycache__" in relative.parts or path.suffix == ".pyc":
+            continue
+        files[relative.as_posix()] = path.read_bytes()
+    return files
+
+
+def _run_fixture_tests(root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            ".",
+            "-p",
+            "test_*.py",
+            "-q",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+
+
+def check_investigation_fixture(fixture_dir: Path) -> list[str]:
+    """Gate D checks for one root-cause fixture."""
+    name = fixture_dir.name
+    problems: list[str] = []
+
+    meta_path = fixture_dir / "meta.json"
+    if not meta_path.is_file():
+        return [f"{name}: missing meta.json"]
+    meta, errors = _load_json(meta_path)
+    if errors or meta is None:
+        return errors or [f"{name}: meta.json must be an object"]
+    if meta.get("schema") != INVESTIGATION_FIXTURE_SCHEMA:
+        problems.append(f"{name}: schema must be {INVESTIGATION_FIXTURE_SCHEMA!r}")
+    fixture_id = meta.get("id")
+    if not isinstance(fixture_id, str) or not fixture_id.endswith("/" + name):
+        problems.append(f"{name}: id must end with '/{name}'")
+    for key in ("kind", "stack", "title"):
+        if not isinstance(meta.get(key), str) or not meta[key].strip():
+            problems.append(f"{name}: {key} must be a non-empty string")
+    if meta.get("kind") != "investigation":
+        problems.append(f"{name}: kind must be 'investigation'")
+    expected = meta.get("expected")
+    if not isinstance(expected, dict):
+        return problems + [f"{name}: expected must be an object"]
+
+    report_path = fixture_dir / "report.md"
+    if not report_path.is_file():
+        return problems + [f"{name}: missing report.md"]
+    try:
+        text = report_path.read_text(encoding="utf-8")
+        report = investigation_mod.extract_json(text)
+        proof_kind = investigation_mod.check(report)
+    except (OSError, investigation_mod.InvestigationError) as exc:
+        return problems + [f"{name}/report.md: {exc}"]
+
+    if proof_kind != expected.get("proof_kind"):
+        problems.append(
+            f"{name}: proof kind {proof_kind!r} != expected {expected.get('proof_kind')!r}"
+        )
+    if report["proof"].get("test") != expected.get("test"):
+        problems.append(f"{name}: proof test does not match expected test")
+    cause = report["cause"].lower()
+    for token in expected.get("cause_tokens", []):
+        if isinstance(token, str) and token.lower() not in cause:
+            problems.append(f"{name}: cause does not name {token!r}")
+
+    diff_path = fixture_dir / "diff.patch"
+    if not diff_path.is_file():
+        problems.append(f"{name}: missing diff.patch")
+        return problems
+    diff_hash = f"sha256:{_sha256(diff_path)}"
+    if report.get("diff_hash") != diff_hash:
+        problems.append(
+            f"{name}: diff_hash {report.get('diff_hash')!r} does not match diff.patch "
+            f"({diff_hash})"
+        )
+
+    before = fixture_dir / "before"
+    after = fixture_dir / "after"
+    if not before.is_dir() or not after.is_dir():
+        return problems + [f"{name}: before/ and after/ are required"]
+
+    before_files = _significant_files(before)
+    after_files = _significant_files(after)
+    changed = sorted(
+        path
+        for path in set(before_files) | set(after_files)
+        if before_files.get(path) != after_files.get(path)
+    )
+    expected_changed = expected.get("changed_files", [])
+    if changed != expected_changed:
+        problems.append(
+            f"{name}: changed files {changed!r} != expected {expected_changed!r}"
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        applied = Path(tmp) / "before"
+        shutil.copytree(before, applied)
+        apply = subprocess.run(
+            ["git", "apply", "-p1", str(diff_path)],
+            cwd=applied,
+            capture_output=True,
+            text=True,
+        )
+        if apply.returncode != 0:
+            problems.append(
+                f"{name}: diff.patch does not apply: {apply.stderr.strip()}"
+            )
+        elif _significant_files(applied) != after_files:
+            problems.append(f"{name}: applying diff.patch does not reproduce after/")
+
+    before_run = _run_fixture_tests(before)
+    if before_run.returncode == 0:
+        problems.append(f"{name}: before/ tests pass; the fixture does not fail")
+    after_run = _run_fixture_tests(after)
+    if after_run.returncode != 0:
+        detail = (after_run.stderr or after_run.stdout).strip().splitlines()
+        problems.append(
+            f"{name}: after/ tests fail: {detail[-1] if detail else 'no output'}"
+        )
+
+    readme = fixture_dir / "README.md"
+    if not readme.is_file():
+        problems.append(f"{name}: missing README.md")
+    else:
+        readme_text = readme.read_text(encoding="utf-8")
+        for section in ("## Symptom", "## Reproduction", "## A correct pass must"):
+            if section not in readme_text:
+                problems.append(f"{name}: README.md has no {section!r} section")
+
+    return problems
+
+
+def run_gate_d(fixtures_dir: Path = M3_FIXTURES) -> tuple[bool, list[str], int]:
+    """Run Gate D (root-cause fixtures). Returns (ok, messages, fixture_count)."""
+    directories = _fixture_dirs(fixtures_dir)
+    if not directories:
+        return False, [f"no investigation fixtures under {fixtures_dir}"], 0
+
+    ok = True
+    messages: list[str] = []
+    for directory in directories:
+        problems = check_investigation_fixture(directory)
+        label = directory.relative_to(fixtures_dir)
+        if problems:
+            ok = False
+            messages.append(f"FAIL {label}")
+            messages.extend(problems)
+        else:
+            messages.append(f"ok   {label}")
+    return ok, messages, len(directories)
+
+
 def _integrity_fixtures(fixtures_dir: Path) -> dict[str, dict]:
     fixtures: dict[str, dict] = {}
-    for directory in _fixture_dirs(fixtures_dir):
+    for directory in _dirs_with_schema(fixtures_dir, FIXTURE_SCHEMA):
         meta, _ = _load_json(directory / "meta.json")
         if meta is not None and meta.get("kind") == "integrity":
             fixtures[meta["id"]] = meta
@@ -564,7 +759,7 @@ def run_gate_c(scores: Path | None = None, runs_dir: Path = RUNS) -> tuple[bool,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gate", choices=("a", "b", "c"), required=True)
+    parser.add_argument("--gate", choices=("a", "b", "c", "d"), required=True)
     parser.add_argument("--fixtures", type=Path, default=FIXTURES)
     parser.add_argument("--runs", type=Path, default=RUNS)
     parser.add_argument("--scores", type=Path, default=None)
@@ -576,6 +771,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.gate == "b":
         ok, messages, count = run_gate_b(args.runs, args.fixtures)
         title = f"Gate B — integrity ({count} integrity cases)"
+    elif args.gate == "d":
+        ok, messages, count = run_gate_d(args.fixtures / "m3")
+        title = f"Gate D — root cause ({count} fixtures)"
     else:
         ok, messages, count = run_gate_c(args.scores, args.runs)
         title = f"Gate C — recall ({count} cases)"
