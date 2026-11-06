@@ -1,0 +1,20 @@
+--- a/store.go
++++ b/store.go
+@@ -1,10 +1,13 @@
+ package store
+ 
+-import "context"
++import (
++	"context"
++	"log"
++)
+ 
+-func Save(ctx context.Context, rec Record) error {
++func Save(ctx context.Context, rec Record) (*Response, error) {
+ 	if err := db.Save(ctx, rec); err != nil {
+-		return err
++		log.Printf("save failed: %v", err)
+ 	}
+-	return nil
++	return &Response{OK: true}, nil
+ }

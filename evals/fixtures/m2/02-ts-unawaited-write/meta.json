@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.fixture/v1",
+  "id": "m2/02-ts-unawaited-write",
+  "kind": "defect",
+  "stack": "typescript",
+  "tier": "T1",
+  "title": "Database write not awaited before the response (TypeScript)",
+  "expected": {
+    "verdict": "FIX",
+    "findings_min": 1,
+    "lenses": [
+      "L1"
+    ],
+    "severities": [
+      "P1"
+    ],
+    "absence": false
+  }
+}

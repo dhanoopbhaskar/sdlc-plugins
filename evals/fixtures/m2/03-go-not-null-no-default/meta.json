@@ -1,0 +1,19 @@
+{
+  "schema": "sdlc.fixture/v1",
+  "id": "m2/03-go-not-null-no-default",
+  "kind": "defect",
+  "stack": "go",
+  "tier": "T2",
+  "title": "NOT NULL column with no default and no down path (Go/SQL)",
+  "expected": {
+    "verdict": "FIX",
+    "findings_min": 2,
+    "lenses": [
+      "L3"
+    ],
+    "severities": [
+      "P1"
+    ],
+    "absence": true
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema": "sdlc.profile/v1",
+  "generated_by": "plan",
+  "base": "main",
+  "stack": ["python"],
+  "commands": {
+    "install": { "cmd": "uv sync", "source": "uv.lock" },
+    "test": { "cmd": "uv run pytest -q", "source": "pyproject.toml" },
+    "lint": { "cmd": "uv run ruff check .", "source": "pyproject.toml" },
+    "typecheck": { "cmd": "uv run mypy .", "source": "pyproject.toml" },
+    "build": null
+  },
+  "workspaces": {
+    "services/api": {
+      "commands": {
+        "test": {
+          "cmd": "uv run pytest services/api -q",
+          "source": "services/api/pyproject.toml"
+        }
+      }
+    }
+  },
+  "ci": { "file": ".github/workflows/ci.yml", "jobs": ["test", "lint"] },
+  "risk_paths": ["src/auth/**", "src/payments/**", "migrations/**"],
+  "exclusions": ["**/generated/**", "vendor/**"],
+  "notes": "Tests require DATABASE_URL; use docker compose up -d db"
+}
