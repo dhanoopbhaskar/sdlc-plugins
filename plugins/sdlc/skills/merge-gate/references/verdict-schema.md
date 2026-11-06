@@ -49,14 +49,14 @@ and recomputes `verdict`. A mismatch fails.
 | `base_sha` | string | non-empty; the merge-base commit |
 | `diff_hash` | string | non-empty; hash of the reviewed diff |
 | `profile_hash` | string | non-empty; hash of the base-commit profile |
-| `tier` | `T0`/`T1`/`T2` | re-derived by the gate, not copied from `plan` blindly |
-| `isolation` | `isolated`/`single-context` | T2 requires `isolated` |
+| `tier` | `T0`/`T1`/`T2`/`T3` | re-derived by the gate, not copied from `plan` blindly |
+| `isolation` | `isolated`/`single-context` | T2 and T3 require `isolated` |
 | `acs` | `confirmed`/`unconfirmed` | `unconfirmed` forces `UNSCOPED` |
 | `findings` | array | see below |
 | `unproven` | array | `{item, accepted, reason}`; `accepted: false` blocks |
 | `coverage_gaps` | array | `{lens, item, t2_relevant}`; a `t2_relevant` gap must also appear in `unproven` |
 | `blocked_env` | array of strings | non-empty forces `BLOCKED-ENV` |
-| `signoff` | object or null | `{approver, date, scope}`; required for T2 `MERGE-READY` |
+| `signoff` | object or null | `{approver, date, scope}`; required for T2/T3 `MERGE-READY` |
 | `verdict` | string | must equal the computed verdict exactly |
 
 ## Findings
@@ -80,9 +80,9 @@ P0 not risk-accepted                    → BLOCK
 else P1 not risk-accepted               → FIX
 else a required command cannot run      → BLOCKED-ENV
 else ACs missing or unconfirmed         → UNSCOPED
-else T2 without isolated passes         → BLOCKED-UNVERIFIED
+else T2/T3 without isolated passes      → BLOCKED-UNVERIFIED
 else any UNPROVEN not accepted          → BLOCKED-UNVERIFIED
-else T2 without sign-off                → AWAITING-SIGNOFF
+else T2/T3 without sign-off             → AWAITING-SIGNOFF
 else T0/T1 without isolated passes      → MERGE-READY (SINGLE-CONTEXT)
 else                                    → MERGE-READY
 ```
@@ -93,7 +93,7 @@ Qualifiers are appended in this order: `SINGLE-CONTEXT`, `SIGNED`,
 ## Rules the parser enforces
 
 - `verdict` equals the computed string.
-- `T2` findings are never merged without `isolation: "isolated"` and a `signoff`.
+- `T2`/`T3` findings are never merged without `isolation: "isolated"` and a `signoff`.
 - A `t2_relevant` coverage gap is represented in `unproven`.
 - Every finding has a trigger; every absence finding has `absence_of`.
 - No quoted secrets.

@@ -44,8 +44,7 @@ python3 evals/run.py --gate=c --scores /path/to/held-out.json
 - `false_blocks` — clean trials that returned `BLOCK`, `FIX`, or `BLOCKED-*`.
 - `reproduced` — the verdict was identical in three runs.
 
-Aim for 30 defect cases and 30 controls: 10 cases per tier, each tier with both
-defects and controls.
+Aim for 10 cases per tier across `T0`–`T3`, each tier with both defects and controls.
 
 ## Thresholds for `source: "held-out"`
 

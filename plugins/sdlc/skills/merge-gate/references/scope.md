@@ -76,8 +76,14 @@ Re-derive the tier from the diff **and the base profile**. `plan` only proposes.
 | T0 | docs, comments, copy, formatting only |
 | T1 | any logic, test, or non-risky config change |
 | T2 | matches base-profile `risk_paths`, or touches auth, payments, deletion, migrations, infrastructure, crypto, external IO, concurrency, CI/IaC, or `.sdlc/profile.json` |
+| T3 | `plan` proposed exhaustive analysis, or the change is cross-module or changes a public API, schema, event, CLI, or data contract |
 
 If `plan` proposed a higher tier, keep the higher one. A diff cannot lower its own tier: the profile used for tiering comes from the base commit.
+
+T3 is a plan-side analysis depth. Re-derive it from the same triggers, run the review at least
+as strictly as T2, and record it. The gate does not grade the plan's impact map; an
+undispositioned impact entry is a review note, not a verdict rule. Throughout the gate,
+`T2-relevant` means the risk class and applies to T3 as well.
 
 ## `scope.md` template
 

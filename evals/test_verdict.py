@@ -145,6 +145,18 @@ class ComputeTests(unittest.TestCase):
         )
         self.assertEqual(v.check(data), "MERGE-READY (SIGNED, RISK-ACCEPTED)")
 
+    def test_t3_requires_isolation(self) -> None:
+        data = artifact(tier="T3", isolation="single-context", signoff=signoff(), verdict="BLOCKED-UNVERIFIED")
+        self.assertEqual(v.check(data), "BLOCKED-UNVERIFIED")
+
+    def test_t3_awaiting_signoff(self) -> None:
+        data = artifact(tier="T3", isolation="isolated", verdict="AWAITING-SIGNOFF")
+        self.assertEqual(v.check(data), "AWAITING-SIGNOFF")
+
+    def test_t3_signed(self) -> None:
+        data = artifact(tier="T3", isolation="isolated", signoff=signoff(), verdict="MERGE-READY (SIGNED)")
+        self.assertEqual(v.check(data), "MERGE-READY (SIGNED)")
+
     def test_p0_beats_accepted_p1(self) -> None:
         data = artifact(
             findings=[

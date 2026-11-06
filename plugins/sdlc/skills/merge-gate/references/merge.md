@@ -49,9 +49,9 @@ Only a named human can accept risk. Each acceptance records:
 
 The finding is still printed in full. The verdict keeps the qualifier `RISK-ACCEPTED`. A finding cannot be accepted by the reviewer agent on its own authority.
 
-## 5. T2 sign-off
+## 5. T2/T3 sign-off
 
-T2 `MERGE-READY` requires:
+T2 and T3 `MERGE-READY` require:
 
 ```json
 { "approver": "<name>", "date": "YYYY-MM-DD", "scope": "<what was signed>" }
@@ -68,9 +68,9 @@ P0 not risk-accepted                    → BLOCK
 else P1 not risk-accepted               → FIX
 else a required command cannot run      → BLOCKED-ENV
 else ACs missing or unconfirmed         → UNSCOPED
-else T2 without isolated passes         → BLOCKED-UNVERIFIED
+else T2/T3 without isolated passes      → BLOCKED-UNVERIFIED
 else any UNPROVEN not accepted          → BLOCKED-UNVERIFIED
-else T2 without sign-off                → AWAITING-SIGNOFF
+else T2/T3 without sign-off             → AWAITING-SIGNOFF
 else T0/T1 without isolated passes      → MERGE-READY (SINGLE-CONTEXT)
 else                                    → MERGE-READY
 ```

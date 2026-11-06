@@ -18,7 +18,7 @@ from pathlib import Path
 SCHEMA = "sdlc.verdict/v1"
 SEVERITIES = {"P0", "P1", "P2", "P3"}
 LENSES = {"L1", "L2", "L3"}
-TIERS = {"T0", "T1", "T2"}
+TIERS = {"T0", "T1", "T2", "T3"}
 ISOLATION = {"isolated", "single-context"}
 ACS = {"confirmed", "unconfirmed"}
 
@@ -208,11 +208,11 @@ def compute(verdict: dict) -> str:
         return "BLOCKED-ENV"
     if verdict["acs"] != "confirmed":
         return "UNSCOPED"
-    if verdict["tier"] == "T2" and verdict["isolation"] != "isolated":
+    if verdict["tier"] in {"T2", "T3"} and verdict["isolation"] != "isolated":
         return "BLOCKED-UNVERIFIED"
     if any(not item["accepted"] for item in verdict["unproven"]):
         return "BLOCKED-UNVERIFIED"
-    if verdict["tier"] == "T2" and verdict.get("signoff") is None:
+    if verdict["tier"] in {"T2", "T3"} and verdict.get("signoff") is None:
         return "AWAITING-SIGNOFF"
 
     qualifiers: list[str] = []

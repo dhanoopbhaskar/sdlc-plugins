@@ -107,7 +107,9 @@ from diff scope. Both use the gitignore/pathspec dialect:
 - `!` re-includes, and the last matching pattern wins.
 
 Validate a sample of matches before committing the file. An over-broad exclusion hides
-reviewed code; an over-broad risk path creates noisy T2 reviews.
+reviewed code; an over-broad risk path creates noisy T2 reviews. For T3, `risk_paths` only
+seed the impact map: the plan must still follow callers, importers, and consumers beyond
+these patterns.
 
 ## Validation
 

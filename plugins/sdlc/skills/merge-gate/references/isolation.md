@@ -46,9 +46,9 @@ Run the passes sequentially in one context, but:
 
 The verdict then carries `SINGLE-CONTEXT`. That label is the honest price of the shortcut.
 
-## T2 is different
+## T2 and T3 are different
 
-T2 requires Mode A or B. If neither is available:
+T2 and T3 require Mode A or B. If neither is available:
 
 - do not run a degraded attack and call it a review;
 - record the reason in `unproven`;

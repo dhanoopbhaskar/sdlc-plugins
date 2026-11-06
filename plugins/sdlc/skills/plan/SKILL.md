@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Plans a change before code: falsifiable acceptance criteria, risk register, review tier, and a project profile. Use to spec or break down work."
+description: "Plans a change before code: falsifiable acceptance criteria, risk register, review tier, project profile, and an exhaustive T3 analysis. Use to spec or break down work."
 ---
 
 # Plan
@@ -28,6 +28,9 @@ estimate delivery dates, or approve its own output.
 
 Spike mode must be explicit. Label the artifact `SPIKE` and say what evidence ends the spike.
 A spike result is input to a later normal plan; it is never presented as merge-ready.
+
+Exhaustive (`T3`) is not a third mode. It is a normal plan with a higher analysis depth, so it
+still needs falsifiable acceptance criteria and still stops at approval.
 
 ## Procedure
 
@@ -60,6 +63,7 @@ any section that does not apply as `none` rather than deleting it:
 - assumptions and constraints;
 - open questions;
 - acceptance criteria;
+- impact map, approach decision, and blast radius (T3 only);
 - risks;
 - risk paths and proposed tier;
 - profile state.
@@ -86,6 +90,8 @@ Rules:
 - Each AC names its check: a test id, a command, or a manual procedure.
 - If a requirement cannot be graded, it is a non-goal or an open question, not an AC.
 - Do not restate the implementation as the criterion.
+- For T3, add an AC for contract compatibility and one for rollback when the change cannot be
+  reversed without a deploy.
 
 ### 5. Risk register
 
@@ -105,11 +111,31 @@ propose a tier:
 | T0 | Docs, comments, copy, formatting only. |
 | T1 | Any logic, test, or non-risky config change. |
 | T2 | Auth, payments, deletion, migrations, infrastructure, crypto, external IO, concurrency, CI/IaC, or `.sdlc/profile.json`. |
+| T3 (exhaustive) | The user asks for exhaustive analysis, or the change is cross-module, changes a public API, schema, event, CLI, or data contract, is an architectural refactor, or the approach itself is in question. |
 
 Write the rationale. `merge-gate` will derive the final tier from the diff and the base
-profile, so an optimistic proposal does not lower review depth.
+profile, so an optimistic proposal does not lower review depth. T3 is the only tier that
+requires the analysis in step 7. When unsure between T2 and T3, propose T3.
 
-### 7. Bootstrap the profile
+### 7. Exhaustive analysis (T3)
+
+T3 does not relax anything below it. It adds three sections that must survive review:
+
+- **Impact map** — every file that can change, and every file that can be affected without
+  changing: callers, importers, consumers, shared contracts, configuration, tests, and docs.
+  Give each entry a disposition (`change`, `no-change`, `unproven`) and the evidence that
+  justifies it (call site, import edge, schema reference, search). An undispositioned file is
+  not an exhaustive plan.
+- **Approach decision** — the approaches considered, the one chosen, why it works, why each
+  rejected alternative fails, and what evidence would invalidate the choice. "It is the only
+  option" needs a reason.
+- **Blast radius** — what breaks if the change is wrong, how that is detected, and whether it
+  can be rolled back without data loss. Extend the risk register; do not duplicate it.
+
+Stop and ask when the impact map cannot be bounded. Do not silently shrink the tier: an
+unbounded surface is an open question or a spike, not a T2.
+
+### 8. Bootstrap the profile
 
 If `.sdlc/profile.json` is absent, write it from the probe. If it exists, read it and never
 overwrite it; record drift between the profile and the repository as an open question. When
@@ -120,10 +146,11 @@ The profile is a claim about the project, not a convenience file. Every command 
 The file is user-owned after creation and is edited deliberately, not regenerated behind the
 user's back.
 
-### 8. Present for approval
+### 9. Present for approval
 
 Return the spec path (or the issue text), the ACs, the proposed tier, and any open questions.
-Ask for approval before implementation starts. Do not mark the plan approved yourself.
+For T3, also summarize the impact map, the chosen approach, and the blast radius. Ask for
+approval before implementation starts. Do not mark the plan approved yourself.
 
 ## Output contract
 
@@ -145,6 +172,9 @@ In normal mode, do not report the plan complete until all are true:
       hidden.
 - [ ] The risk register covers behavior, data, security, operations, and rollback.
 - [ ] `risk_paths` use the documented glob dialect and the tier has a rationale.
+- [ ] For T3, the impact map dispositions every entry with evidence, the approach decision
+      names a rejected alternative or proves none exists, and the blast radius covers behavior,
+      data, security, operations, compatibility, and rollback.
 - [ ] The profile is valid and sourced, contains no secrets, and was written only if absent or
       edited with explicit approval.
 - [ ] The plan states that it awaits human approval.
@@ -160,6 +190,7 @@ and a decision rule. A spike has no ACs and no approval section.
 | Stack or commands cannot be determined | Ask. Record `stack: []` and `null` commands; do not guess. |
 | Existing profile conflicts with the repository | Keep the profile, record the drift, and ask which is authoritative. |
 | A requirement has no observable outcome | Demote it to a non-goal or an open question. |
+| The impact map cannot be bounded | Record `unproven` entries, ask, or switch to spike mode; never downgrade to T2 silently. |
 | User asks for implementation | Hand off with the approved spec; this skill stops. |
 | User asks for a plan without ACs | Offer spike mode explicitly; do not ship a normal plan. |
 
@@ -169,6 +200,7 @@ and a decision rule. A spike has no ACs and no approval section.
   spike may produce a labelled prototype as evidence, never as an approved change.
 - Do not invent commands, versions, paths, or acceptance criteria.
 - Do not write a normal plan whose ACs cannot fail.
+- Do not label a plan T3 without a dispositioned impact map and a written approach decision.
 - Do not overwrite an existing profile or edit one without approval.
 - Do not claim the plan is approved or merge-ready.
 - Do not turn a spike into a delivery commitment.

@@ -306,7 +306,7 @@ class GateCTests(unittest.TestCase):
                 "false_blocks": 1,
                 "reproduced": True,
             }
-            for tier in ("T0", "T1", "T2")
+            for tier in ("T0", "T1", "T2", "T3")
             for index in range(1)
         ]
 
@@ -315,7 +315,7 @@ class GateCTests(unittest.TestCase):
             path = self._write(Path(temp), self._passing_cases())
             ok, messages, count = run.run_gate_c(path)
             self.assertTrue(ok, "\n".join(messages))
-            self.assertEqual(count, 3)
+            self.assertEqual(count, 4)
 
     def test_low_tier_recall_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

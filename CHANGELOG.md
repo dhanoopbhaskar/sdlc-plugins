@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `plan` gains `T3` (exhaustive), a higher analysis depth above `T2`. It adds a transitive
+  impact map (every file that can change or be affected, dispositioned `change`/`no-change`/
+  `unproven` with evidence), an approach decision (chosen approach, rejected alternatives, why
+  it works), and a blast radius (failure, detection, rollback). Triggered by explicit request
+  or by cross-module, public-contract, architectural, or approach-uncertain changes.
+- `merge-gate` recognizes `T3` in its tier table and verdict arithmetic, applying T2 isolation
+  and sign-off rules. The exhaustive impact map remains a plan-side artifact and is not graded
+  by the gate.
+
+### Changed
+- `T2-relevant` coverage gaps and sign-off now apply to `T3` as well.
+- The verdict schema and eval runner accept `tier: "T3"`.
+
 ## [0.3.0] - 2026-11-06
 
 ### Added

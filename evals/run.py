@@ -49,7 +49,7 @@ INVESTIGATION_FIXTURE_SCHEMA = "sdlc.investigation-fixture/v1"
 GATE_B_SCHEMA = "sdlc.gate-b/v1"
 GATE_C_SCHEMA = "sdlc.gate-c/v1"
 M3_FIXTURES = FIXTURES / "m3"
-TIERS = ("T0", "T1", "T2")
+TIERS = ("T0", "T1", "T2", "T3")
 KINDS = ("defect", "integrity")
 
 EVIDENCE_HEADER_RE = re.compile(r"^### (P[0-3]-\d{3}) · (L[1-3]) · (.+?)\s*$", re.M)

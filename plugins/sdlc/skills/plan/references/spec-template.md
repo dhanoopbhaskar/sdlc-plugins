@@ -8,7 +8,7 @@ Copy this template into `specs/<slug>.md`, or return the same sections as issue 
 
 - status: DRAFT | AWAITING-APPROVAL | APPROVED | SPIKE
 - date: <YYYY-MM-DD>
-- tier: T0 | T1 | T2
+- tier: T0 | T1 | T2 | T3 (exhaustive)
 - profile: created | existing | not-written
 
 ## Problem
@@ -43,6 +43,35 @@ Compatibility, deadlines, contracts, or environments that limit the design.
 |---|---|---|
 | AC-1 | <observable outcome> | <test id, command, or manual procedure> |
 | AC-2 | <negative or edge case> | <check> |
+
+## Impact map (T3)
+
+Every file that can change, plus every file that can be affected without changing. Mark a
+section `none` when the tier is not T3.
+
+| Path | Relationship | Disposition | Evidence |
+|---|---|---|---|
+| `src/session.ts` | direct edit | change | AC-1 |
+| `src/api/handler.ts` | calls the changed function | no-change | call site L42; signature unchanged |
+| `clients/web/session.ts` | consumes the response contract | unproven | contract test not written |
+
+Disposition is exactly one of `change`, `no-change`, `unproven`. `change` paths appear in the
+changed set; `unproven` paths become open questions with an owner.
+
+## Approach decision (T3)
+
+- **chosen:** <the approach>
+- **why it works:** <the mechanism that satisfies the ACs>
+- **rejected:** <alternative> — <why it fails>
+- **invalidated by:** <evidence that would reopen the decision>
+
+A T3 plan with no rejected alternative must state why no other approach was viable.
+
+## Blast radius (T3)
+
+| If this is wrong | Breaks | Detected by | Rollback |
+|---|---|---|---|
+| <failure> | <user or system impact> | <signal or check> | <revert path, data safety> |
 
 ## Risks
 
@@ -133,12 +162,21 @@ Cover each category; write `none` when a category genuinely does not apply.
 - **Compatibility:** API, schema, event, client, or consumer breakage.
 - **Rollback:** can the change be reverted without losing data?
 
+For T3, the impact map supplies the file-level surface and the blast radius supplies the
+failure modes. The risk register must still name likelihood, impact, detection, and mitigation
+for each one.
+
 ## Tier prompts
 
 - **T0** only when every changed line is non-executable: docs, comments, copy.
 - **T1** for ordinary logic, tests, or non-risky config.
 - **T2** when the change touches auth, payments, deletion, migrations, infrastructure,
   crypto, external IO, concurrency, CI/IaC, or the profile itself.
+- **T3 (exhaustive)** when the user asks for it, or the change is cross-module, changes a
+  public API, schema, event, CLI, or data contract, is an architectural refactor, or the
+  approach itself is in question. T3 requires the impact map, approach decision, and blast
+  radius above.
 
 When unsure between two tiers, propose the higher one and say why. `merge-gate` re-derives
-the tier and keeps the higher of the two.
+the tier and keeps the higher of the two. T3 analysis is owned by `plan`; the gate does not
+grade the impact map.

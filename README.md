@@ -24,7 +24,7 @@ The plugins are versioned in lockstep: one version, one changelog, one release t
 | Skill | Description |
 | --- | --- |
 | [sdlc-behavior-principles](plugins/sdlc/skills/sdlc-behavior-principles/SKILL.md) | Behavioral guardrails for planning, implementing, and reviewing changes: surface assumptions, keep solutions simple, make surgical diffs, require verifiable checks, and confirm destructive operations. |
-| [plan](plugins/sdlc/skills/plan/SKILL.md) | Turns a request into a spec with falsifiable acceptance criteria, a risk register, a review tier, and a `.sdlc/profile.json` project profile. Includes an explicit spike mode. |
+| [plan](plugins/sdlc/skills/plan/SKILL.md) | Turns a request into a spec with falsifiable acceptance criteria, a risk register, a review tier, and a `.sdlc/profile.json` project profile. Includes an explicit spike mode and an exhaustive `T3` depth with an impact map, approach decision, and blast radius. |
 | [merge-gate](plugins/sdlc/skills/merge-gate/SKILL.md) | Reviews a change before merge: scope, proof, three attack lenses, and a computed verdict that never claims merge-ready without evidence. |
 | [investigate](plugins/sdlc/skills/investigate/SKILL.md) | Finds and proves a root cause before fixing a failing test, stack trace, or wrong output, then proves the fix with a regression test or an explicit infra proof. |
 | [verify-task](plugins/sdlc/skills/verify-task/SKILL.md) | Enforces explicit proof of correctness (requirement, test, regression, diff, unproven) before a task is declared done. |
@@ -62,7 +62,7 @@ Install `discovery` only when the task is migration or due-diligence work.
 Once installed, skills are picked up automatically by the agent when their `description` matches the current task—no manual invocation is required. For example:
 
 - Ask the agent to plan, implement, or review a change and it will apply the `sdlc-behavior-principles` guardrails.
-- Ask the agent to plan or break down a change and it will use `plan` to write falsifiable acceptance criteria, a risk register, a review tier, and the project profile.
+- Ask the agent to plan or break down a change and it will use `plan` to write falsifiable acceptance criteria, a risk register, a review tier, and the project profile. Ask for exhaustive analysis on a cross-cutting change and it proposes `T3` with a transitive impact map, an approach decision, and a blast radius.
 - Ask the agent to debug a failing test or stack trace and it will use `investigate` to prove the root cause before fixing it.
 - Ask the agent to confirm a task is complete and it will apply the `verify-task` checklist.
 - Ask the agent to review a diff before merging and it will run `merge-gate`.
