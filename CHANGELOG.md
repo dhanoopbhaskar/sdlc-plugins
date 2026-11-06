@@ -5,90 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- `plan` gains `T3` (exhaustive), a higher analysis depth above `T2`. It adds a transitive
-  impact map (every file that can change or be affected, dispositioned `change`/`no-change`/
-  `unproven` with evidence), an approach decision (chosen approach, rejected alternatives, why
-  it works), and a blast radius (failure, detection, rollback). Triggered by explicit request
-  or by cross-module, public-contract, architectural, or approach-uncertain changes.
-- `merge-gate` recognizes `T3` in its tier table and verdict arithmetic, applying T2 isolation
-  and sign-off rules. The exhaustive impact map remains a plan-side artifact and is not graded
-  by the gate.
-
-### Changed
-- `T2-relevant` coverage gaps and sign-off now apply to `T3` as well.
-- The verdict schema and eval runner accept `tier: "T3"`.
-
 ## [0.3.0] - 2026-11-06
 
 ### Added
-- `plan` skill: turns a request into a spec with falsifiable acceptance criteria, a risk
-  register, proposed review tier, risk paths, and a bootstrapped `.sdlc/profile.json`.
-  Includes an explicit spike mode and a profile contract reference.
-- `investigate` skill: enforces a demonstrated root cause before a fix, with reproduction,
-  minimisation, isolation, a cause statement, and regression, infra, and flaky proof modes.
-- `repo-reconnaissance` now emits or enriches `.sdlc/profile.json` with the same schema,
-  probe order, and workspace resolution as `plan`, without downgrading an existing profile.
-- Destructive-operation guard in `sdlc-behavior-principles`: deletes, bulk updates, history
-  rewrites, schema drops, and dependency removal require explicit confirmation.
-- `merge-gate` skill: a four-phase review (scope, proof, attack, merge) with three disjoint
-  lenses (side effects, security, blast radius) and a computed `sdlc.verdict/v1` verdict.
-- Full `merge-gate` reference set: scope resolution and diff hashing, proof receipts and
-  regression evidence, isolation modes and briefs, merge and risk-acceptance rules, the
-  evidence format, and the base-profile trust boundary.
-- `evals/verdict.py` and tests: validate a verdict artifact and recompute its verdict,
-  including redaction, risk acceptance, coverage-gap promotion, and verdict arithmetic.
-- 11 development fixtures under `evals/fixtures/m2/`: eight defect fixtures across Python,
-  TypeScript, Go, and YAML, plus three integrity fixtures (prompt injection, profile
-  tampering, weakened assertions). Each fixture has a before/after pair, an applying diff,
-  a reference verdict, and a machine-readable expectation file.
-- `evals/run.py`: Gate A (format and arithmetic, runs in CI), Gate B (integrity, fails on any
-  unsafe pass), Gate C (held-out recall with per-tier thresholds), and Gate D (root-cause
-  fixtures). Gate B has a committed single-context self-run; Gate C takes a held-out score
-  file that is never committed.
-- `evals/investigation.py` and `evals/test_investigation.py`: validate `sdlc.investigation/v1`
-  reports (cause, `file:line` evidence, alternatives ruled out, proof receipts, redaction) and
-  test the Gate D fixture checks.
-- Three root-cause fixtures under `evals/fixtures/m3/` across three Python mechanisms (cache
-  key omits the tenant, mutable default argument shared across calls, pagination slice end
-  off-by-one). Each has a before/after pair, an applying diff, a reference investigation
-  report, and a regression test that fails before the fix and passes after it.
-- `evals/measure.py`: estimates the always-on core description budget and the static
-  per-run gate budget; CI fails when either target is exceeded.
-- Profile contract checking in the validator, with a committed sample profile.
-- Committed gstack inventory summary so a fresh session does not depend on local files.
+- `plan` skill: falsifiable acceptance criteria, a risk register, a review tier, and a
+  bootstrapped `.sdlc/profile.json`, plus spike mode and an exhaustive `T3` depth with a
+  transitive impact map, approach decision, and blast radius.
+- `investigate` skill: requires a demonstrated root cause before a fix, with reproduction,
+  minimisation, isolation, and regression, infra, and flaky proof modes.
+- `merge-gate` skill: four-phase review with three disjoint lenses and a computed
+  `sdlc.verdict/v1` verdict; treats `T3` with T2 isolation and sign-off rules.
+- `evals/` suite: verdict and investigation validators, Gate A–D runners, defect, integrity,
+  and root-cause fixtures, and a context-budget check.
+- Destructive-operation guard in `sdlc-behavior-principles`.
+- `repo-reconnaissance` now emits or enriches `.sdlc/profile.json` with the same contract as
+  `plan`.
 
 ### Changed
-- The repository is now a marketplace of two plugins instead of a single plugin:
-  `sdlc` (`sdlc-behavior-principles`, `plan`, `merge-gate`, `investigate`, `verify-task`) and
-  `discovery` (`repo-reconnaissance`, `system-cartography`, `migration-seams`,
-  `legacy-code-discovery`, `code-documenter`).
-- Plugin names shortened: `sdlc-core` → `sdlc` and `sdlc-discovery` → `discovery`.
-  Plugin directories, manifests, marketplace sources, install commands, and tests
-  follow the new names.
-- `scripts/validate_skills.py` is multi-root: it validates every `plugins/*/plugin.json`
-  and `skills/` tree, cross-checks marketplace entries against plugin roots, enforces
-  lockstep versions across plugins, and validates the committed profile and verdict samples.
-- `tests/test_validate_skills.py` now covers multi-root discovery, marketplace
-  cross-references, lockstep versions, duplicate skill names across plugins, and the
-  profile contract.
-- CI now runs the validator, Gate A, Gate D, the context-budget check, and both test suites.
+- The repository is now a marketplace of two plugins, `sdlc` and `discovery` (from
+  `sdlc-core` and `sdlc-discovery`); the repository root is no longer a plugin.
+- The validator is multi-root, cross-checks marketplace entries, enforces lockstep versions,
+  and validates the committed profile and verdict samples.
+- CI runs the validator, Gate A, Gate D, the context-budget check, and both test suites.
 - README documents per-plugin installation, the `sdlc`-only vs `sdlc` + `discovery` decision,
-  the four eval gates, and the context-budget check.
+  and the eval gates.
 - Version `0.2.1` → `0.3.0`, lockstep across both plugins and the marketplace metadata.
 
 ### Removed
-- Root `plugin.json` and `mcp.json`; the repository root is no longer a plugin.
-- The old single-plugin marketplace entry.
+- Root `plugin.json` and `mcp.json`, and the old single-plugin marketplace entry.
 
 ### Migration
-- Replace `copilot plugin install sdlc-plugins@sdlc-plugins` with
-  `copilot plugin install sdlc@sdlc-plugins`, plus
+- Install with `copilot plugin install sdlc@sdlc-plugins`, plus
   `copilot plugin install discovery@sdlc-plugins` when discovery work is needed.
-- `verify-task` is **kept** standalone. It was not absorbed into `merge-gate`; the gate
-  consumes its five evidence items in Phase 2.
+- `verify-task` remains standalone; `merge-gate` consumes its five evidence items in Phase 2.
 
 ## [0.2.1] - 2026-11-04
 
